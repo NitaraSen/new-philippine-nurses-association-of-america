@@ -1,7 +1,10 @@
-export default function ChapterPage({
+import { ChapterDetail } from "@/components/chapters/chapter-detail";
+
+export default async function ChapterPage({
   params,
 }: {
-  params: { chapterId: string };
+  params: Promise<{ chapterId: string }>;
 }) {
-  return <div>Chapter {params.chapterId}</div>;
+  const { chapterId } = await params;
+  return <ChapterDetail chapterId={chapterId} />;
 }

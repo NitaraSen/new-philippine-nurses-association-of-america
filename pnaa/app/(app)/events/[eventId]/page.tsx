@@ -1,3 +1,10 @@
-export default function EventPage({ params }: { params: { eventId: string } }) {
-  return <div>Event {params.eventId}</div>;
+import { EventDetail } from "@/components/events/event-detail";
+
+export default async function EventPage({
+  params,
+}: {
+  params: Promise<{ eventId: string }>;
+}) {
+  const { eventId } = await params;
+  return <EventDetail eventId={eventId} />;
 }

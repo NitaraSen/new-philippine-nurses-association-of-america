@@ -1,7 +1,10 @@
-export default function FundraisingItemPage({
+import { CampaignDetail } from "@/components/fundraising/campaign-detail";
+
+export default async function FundraisingItemPage({
   params,
 }: {
-  params: { fundraisingId: string };
+  params: Promise<{ fundraisingId: string }>;
 }) {
-  return <div>Fundraising Item {params.fundraisingId}</div>;
+  const { fundraisingId } = await params;
+  return <CampaignDetail campaignId={fundraisingId} />;
 }
