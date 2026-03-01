@@ -4,11 +4,10 @@ exports.syncMembers = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const firestore_1 = require("firebase-admin/firestore");
 const params_1 = require("firebase-functions/params");
-const WA_CLIENT_ID = (0, params_1.defineString)("WILD_APRICOT_CLIENT_ID");
-const WA_CLIENT_SECRET = (0, params_1.defineString)("WILD_APRICOT_CLIENT_SECRET");
+const WA_API_KEY = (0, params_1.defineString)("WILD_APRICOT_API_KEY");
 const WA_ACCOUNT_ID = (0, params_1.defineString)("WILD_APRICOT_ACCOUNT_ID");
 async function getWAToken() {
-    const credentials = Buffer.from(`${WA_CLIENT_ID.value()}:${WA_CLIENT_SECRET.value()}`).toString("base64");
+    const credentials = Buffer.from(`APIKEY:${WA_API_KEY.value()}`).toString("base64");
     const response = await fetch("https://oauth.wildapricot.org/auth/token", {
         method: "POST",
         headers: {

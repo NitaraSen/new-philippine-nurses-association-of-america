@@ -17,8 +17,8 @@
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.19.35",
+    "typescript": "^5.7.0"
   },
   "private": true
 }

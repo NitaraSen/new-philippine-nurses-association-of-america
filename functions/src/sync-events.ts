@@ -2,13 +2,12 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { defineString } from "firebase-functions/params";
 
-const WA_CLIENT_ID = defineString("WILD_APRICOT_CLIENT_ID");
-const WA_CLIENT_SECRET = defineString("WILD_APRICOT_CLIENT_SECRET");
+const WA_API_KEY = defineString("WILD_APRICOT_API_KEY");
 const WA_ACCOUNT_ID = defineString("WILD_APRICOT_ACCOUNT_ID");
 
 async function getWAToken(): Promise<string> {
   const credentials = Buffer.from(
-    `${WA_CLIENT_ID.value()}:${WA_CLIENT_SECRET.value()}`
+    `APIKEY:${WA_API_KEY.value()}`
   ).toString("base64");
 
   const response = await fetch("https://oauth.wildapricot.org/auth/token", {
