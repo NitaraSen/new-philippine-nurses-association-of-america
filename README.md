@@ -27,6 +27,7 @@ A full-stack web application for managing PNAA's 55+ chapters, 4,000+ members, e
 - **Fundraising** — Track fundraising campaigns with amounts, notes, and chapter attribution
 - **Member Sync** — Automated Wild Apricot membership data sync every minute via Cloud Functions
 - **Role-Based Access** — National admins see all data; chapter admins and members see scoped data
+- **Advanced Data Tables** — Chapters, Events, and Fundraising pages feature a rich table view with sortable, resizable, and drag-to-reorder columns; per-column filters; column visibility toggles; and pagination. Switchable to a card grid via a pill toggle.
 - **Responsive UI** — Mobile-friendly with sidebar navigation and dark mode support
 
 ---
@@ -41,6 +42,8 @@ A full-stack web application for managing PNAA's 55+ chapters, 4,000+ members, e
 | TypeScript | 5 | Type safety |
 | Tailwind CSS | 4 | Utility-first styling |
 | shadcn/ui | — | Radix UI component library |
+| TanStack Table | 8 | Headless table logic (sort, filter, resize, pagination, column order) |
+| dnd-kit | — | Drag-and-drop for column reordering |
 | React Hook Form | 7.71.2 | Form state management |
 | Zod | 4.3.6 | Schema validation |
 | date-fns | 4.1.0 | Date utilities |
@@ -159,7 +162,7 @@ philippine-nurses-association-of-america/
     │   ├── events/             # Event list, card, form, detail
     │   ├── chapters/           # Chapter list, card, detail
     │   ├── fundraising/        # Campaign list, card, form, detail
-    │   └── shared/             # PageHeader, SearchInput, DataTable, etc.
+    │   └── shared/             # PageHeader, SearchInput, AdvancedDataTable, ViewToggle, etc.
     ├── hooks/
     │   ├── use-auth.ts         # Auth helpers (role checks)
     │   ├── use-firestore.ts    # useDocument / useCollection
@@ -272,7 +275,7 @@ firebase deploy --only functions
 |---|---|---|
 | `syncMembers` | Scheduled (every 1 min) | Fetches all contacts from Wild Apricot and upserts to `members` collection. Determines active/lapsed status from renewal due date. |
 | `syncEvents` | Scheduled (every 1 min) | Fetches events from Wild Apricot and inserts into `events` collection. **Insert-only** — existing events are never overwritten. |
-| `updateMembers` | Scheduled | Updates member-derived aggregates (chapter totals, etc.) |
+| `updateMembers` | Scheduled (daily, 2 AM EST) | Recalculates active/lapsed status for all members and rebuilds chapter aggregate totals in the `chapters` collection. |
 | `createUser` | Callable (admin only) | Creates a Firebase Auth user and Firestore user document. Restricted to `national_admin` role. |
 
 ---
