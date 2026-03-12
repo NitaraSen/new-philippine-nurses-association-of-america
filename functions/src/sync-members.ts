@@ -44,7 +44,7 @@ function extractChapterName(
   fieldValues: Array<{ FieldName: string; Value: unknown }>
 ): string {
   const chapterFields = fieldValues.filter((f) =>
-    f.FieldName.startsWith("Chapter")
+    f.FieldName.includes("Chapter")
   );
   for (const field of chapterFields) {
     if (field.Value === null || field.Value === undefined) continue;
@@ -174,6 +174,11 @@ export const syncMembers = onSchedule(
           FieldName: string;
           Value: unknown;
         }>) || [];
+
+      // Skip archived contacts
+      const isArchived = fieldValues.find((f) => f.FieldName === "Archived")?.Value === true;
+      if (isArchived) continue;
+
       const renewalDueDate = extractFieldValue(fieldValues, "Renewal due");
 
       const activeStatus: "Active" | "Lapsed" =
