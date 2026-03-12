@@ -101,6 +101,24 @@ function extractFieldValue(fieldValues, fieldName) {
     }
     return String(field.Value);
 }
+function extractChapterName(fieldValues) {
+    const chapterFields = fieldValues.filter((f) => f.FieldName.includes("Chapter"));
+    for (const field of chapterFields) {
+        if (field.Value === null || field.Value === undefined)
+            continue;
+        let value;
+        if (typeof field.Value === "object" &&
+            "Label" in field.Value) {
+            value = field.Value.Label;
+        }
+        else {
+            value = String(field.Value);
+        }
+        if (value)
+            return value;
+    }
+    return "";
+}
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
@@ -197,6 +215,10 @@ async function runSyncMembers(startFrom, limit) {
     const allMembers = [];
     for (const contact of rawContacts) {
         const fieldValues = contact.FieldValues || [];
+        // Skip archived contacts
+        const isArchived = fieldValues.find((f) => f.FieldName === "Archived")?.Value === true;
+        if (isArchived)
+            continue;
         const renewalDueDate = extractFieldValue(fieldValues, "Renewal due");
         const activeStatus = renewalDueDate && new Date(renewalDueDate) >= now ? "Active" : "Lapsed";
         const memberId = extractFieldValue(fieldValues, "Member ID") || String(contact.Id);
@@ -210,7 +232,7 @@ async function runSyncMembers(startFrom, limit) {
             email: String(contact.Email || ""),
             membershipLevel,
             renewalDueDate,
-            chapterName: extractFieldValue(fieldValues, "Chapter (Active/Associate - 1 year)"),
+            chapterName: extractChapterName(fieldValues),
             highestEducation: extractFieldValue(fieldValues, "Highest Level of Education"),
             memberId,
             region: extractFieldValue(fieldValues, "PNAA Region"),

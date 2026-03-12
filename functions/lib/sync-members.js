@@ -33,7 +33,7 @@ function extractFieldValue(fieldValues, fieldName) {
     return String(field.Value);
 }
 function extractChapterName(fieldValues) {
-    const chapterFields = fieldValues.filter((f) => f.FieldName.startsWith("Chapter"));
+    const chapterFields = fieldValues.filter((f) => f.FieldName.includes("Chapter"));
     for (const field of chapterFields) {
         if (field.Value === null || field.Value === undefined)
             continue;
@@ -125,6 +125,10 @@ exports.syncMembers = (0, scheduler_1.onSchedule)({ schedule: "every 1 minutes",
     const allMembers = [];
     for (const contact of rawContacts) {
         const fieldValues = contact.FieldValues || [];
+        // Skip archived contacts
+        const isArchived = fieldValues.find((f) => f.FieldName === "Archived")?.Value === true;
+        if (isArchived)
+            continue;
         const renewalDueDate = extractFieldValue(fieldValues, "Renewal due");
         const activeStatus = renewalDueDate && new Date(renewalDueDate) >= now ? "Active" : "Lapsed";
         const memberId = extractFieldValue(fieldValues, "Member ID") || String(contact.Id);
