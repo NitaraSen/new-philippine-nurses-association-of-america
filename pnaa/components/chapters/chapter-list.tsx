@@ -8,7 +8,11 @@ import { SearchInput } from "@/components/shared/search-input";
 import { ChapterCard } from "./chapter-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ViewToggle, type ViewMode } from "@/components/shared/view-toggle";
-import { AdvancedDataTable, type ColumnDef, type ColumnMeta } from "@/components/shared/advanced-data-table";
+import {
+  AdvancedDataTable,
+  type ColumnDef,
+  type ColumnMeta,
+} from "@/components/shared/advanced-data-table";
 import { Badge } from "@/components/ui/badge";
 import { Building2 } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -41,7 +45,9 @@ const columns: ColumnDef<ChapterRow, unknown>[] = [
     enableSorting: true,
     meta: { filterType: "text" } satisfies ColumnMeta,
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">{row.original.region}</span>
+      <span className="text-sm text-muted-foreground">
+        {row.original.region}
+      </span>
     ),
   },
   {
@@ -96,7 +102,7 @@ const columns: ColumnDef<ChapterRow, unknown>[] = [
       const rate =
         row.original.totalMembers > 0
           ? Math.round(
-              (row.original.totalActive / row.original.totalMembers) * 100
+              (row.original.totalActive / row.original.totalMembers) * 100,
             )
           : 0;
       return (
@@ -136,7 +142,7 @@ export function ChapterList() {
     const q = debouncedSearch.toLowerCase();
     return data.filter(
       (c) =>
-        c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q)
+        c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q),
     );
   }, [data, debouncedSearch]);
 

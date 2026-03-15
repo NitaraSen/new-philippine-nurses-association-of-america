@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -8,6 +8,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   flexRender,
+  type RowSelectionState,
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
@@ -43,6 +44,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -96,13 +98,28 @@ interface AdvancedDataTableProps<T> {
   emptyIcon?: LucideIcon;
   defaultPageSize?: number;
   globalFilter?: string;
+  enableSelection?: boolean;
+  onSelectionChange?: (rows: T[]) => void;
 }
 
 // Using `any` for the header generic to avoid JSX generic syntax issues in .tsx
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function DraggableHeaderCell({ header }: { header: Header<any, unknown> }) {
+  // Always call useSortable — hooks must not be called conditionally
   const { attributes, isDragging, listeners, setNodeRef, transform } =
     useSortable({ id: header.column.id });
+
+  // The select column is not draggable — render a plain static header cell
+  if (header.column.id === "select") {
+    return (
+      <TableHead
+        style={{ width: header.getSize(), minWidth: header.getSize() }}
+        className="px-3"
+      >
+        {flexRender(header.column.columnDef.header, header.getContext())}
+      </TableHead>
+    );
+  }
 
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
@@ -122,11 +139,7 @@ function DraggableHeaderCell({ header }: { header: Header<any, unknown> }) {
   const sortDir = header.column.getIsSorted();
 
   return (
-    <TableHead
-      ref={setNodeRef}
-      style={style}
-      className="select-none group"
-    >
+    <TableHead ref={setNodeRef} style={style} className="select-none group">
       {/*
         DND listeners live on the content div, NOT on a separate grip icon.
         - The resize handle is a sibling div, so its events never reach this div → no drag/resize conflict.
@@ -172,7 +185,7 @@ function DraggableHeaderCell({ header }: { header: Header<any, unknown> }) {
                   "h-6 w-6 ml-0.5 shrink-0 transition-opacity",
                   isFiltered
                     ? "text-primary opacity-100"
-                    : "opacity-0 group-hover:opacity-60 text-muted-foreground"
+                    : "opacity-0 group-hover:opacity-60 text-muted-foreground",
                 )}
               >
                 <Filter className="h-3 w-3" />
@@ -187,7 +200,7 @@ function DraggableHeaderCell({ header }: { header: Header<any, unknown> }) {
                   value={currentFilter ?? ""}
                   onValueChange={(v) =>
                     header.column.setFilterValue(
-                      v === "__all__" ? undefined : v
+                      v === "__all__" ? undefined : v,
                     )
                   }
                 >
@@ -242,7 +255,7 @@ function DraggableHeaderCell({ header }: { header: Header<any, unknown> }) {
           "absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none select-none",
           "opacity-0 group-hover:opacity-100 transition-opacity",
           "bg-border hover:bg-primary/50",
-          header.column.getIsResizing() && "bg-primary opacity-100"
+          header.column.getIsResizing() && "bg-primary opacity-100",
         )}
       />
     </TableHead>
@@ -259,24 +272,64 @@ export function AdvancedDataTable<T extends object>({
   emptyIcon,
   defaultPageSize = 15,
   globalFilter = "",
+  enableSelection = true,
+  onSelectionChange,
 }: AdvancedDataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
-  const [columnOrder, setColumnOrder] = useState<string[]>(() =>
-    columns
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // The checkbox column, defined here so it can use TanStack's header/cell context
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const selectionColumn: ColumnDef<any, unknown> = {
+    id: "select",
+    size: 44,
+    enableSorting: false,
+    enableHiding: false,
+    enableResizing: false,
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllRowsSelected()
+            ? true
+            : table.getIsSomeRowsSelected()
+              ? "indeterminate"
+              : false
+        }
+        onCheckedChange={(v) => table.toggleAllRowsSelected(!!v)}
+        aria-label="Select all filtered rows"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+  };
+
+  const effectiveColumns = enableSelection
+    ? [selectionColumn, ...columns]
+    : columns;
+
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    const dataColumnIds = columns
       .map((col) => {
         if ("accessorKey" in col) return col.accessorKey as string;
         if ("id" in col && col.id) return col.id;
         return "";
       })
-      .filter(Boolean)
-  );
+      .filter(Boolean);
+    return enableSelection ? ["select", ...dataColumnIds] : dataColumnIds;
+  });
 
   const table = useReactTable({
     data,
-    columns,
+    columns: effectiveColumns,
     state: {
       sorting,
       columnFilters,
@@ -284,9 +337,13 @@ export function AdvancedDataTable<T extends object>({
       columnOrder,
       columnSizing,
       globalFilter,
+      rowSelection,
     },
     columnResizeMode: "onChange",
     enableColumnResizing: true,
+    enableRowSelection: enableSelection ?? true,
+    onRowSelectionChange: setRowSelection,
+    getRowId: (row) => (row as { id?: string }).id ?? row.toString(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
@@ -300,33 +357,38 @@ export function AdvancedDataTable<T extends object>({
     globalFilterFn: "includesString",
   });
 
+  // Lift selected rows to parent whenever selection changes
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    onSelectionChange(table.getSelectedRowModel().rows.map((r) => r.original));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowSelection]);
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, {
       activationConstraint: { delay: 150, tolerance: 8 },
-    })
+    }),
   );
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (active && over && active.id !== over.id) {
-        setColumnOrder((prev) => {
-          const oldIndex = prev.indexOf(active.id as string);
-          const newIndex = prev.indexOf(over.id as string);
-          return arrayMove(prev, oldIndex, newIndex);
-        });
-      }
-    },
-    []
-  );
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active && over && active.id !== over.id) {
+      setColumnOrder((prev) => {
+        const oldIndex = prev.indexOf(active.id as string);
+        const newIndex = prev.indexOf(over.id as string);
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  }, []);
 
   const activeFilters = columnFilters.filter(
-    (f) => f.value !== undefined && f.value !== ""
+    (f) => f.value !== undefined && f.value !== "",
   );
 
   const filteredCount = table.getFilteredRowModel().rows.length;
   const totalCount = data.length;
+  const selectedCount = Object.values(rowSelection).filter(Boolean).length;
 
   if (loading) {
     return (
@@ -353,9 +415,24 @@ export function AdvancedDataTable<T extends object>({
     <div className="space-y-2">
       {/* Table toolbar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        {/* Active filter chips */}
+        {/* Active filter chips + selection count */}
         <div className="flex flex-wrap gap-1.5 min-h-[28px] items-center">
-          {activeFilters.length > 0 ? (
+          {enableSelection && selectedCount > 0 ? (
+            <>
+              <span className="text-xs text-muted-foreground">
+                {selectedCount} selected
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground px-2"
+                onClick={() => setRowSelection({})}
+              >
+                <X className="h-3 w-3" />
+                Clear
+              </Button>
+            </>
+          ) : activeFilters.length > 0 ? (
             <>
               {activeFilters.map((filter) => {
                 const col = table.getColumn(filter.id);
@@ -452,10 +529,7 @@ export function AdvancedDataTable<T extends object>({
                     className="hover:bg-transparent border-b"
                   >
                     {headerGroup.headers.map((header) => (
-                      <DraggableHeaderCell
-                        key={header.id}
-                        header={header}
-                      />
+                      <DraggableHeaderCell key={header.id} header={header} />
                     ))}
                   </TableRow>
                 ))}
@@ -464,7 +538,7 @@ export function AdvancedDataTable<T extends object>({
                 {table.getRowModel().rows.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={columns.length}
+                      colSpan={effectiveColumns.length}
                       className="h-24 text-center text-muted-foreground text-sm"
                     >
                       No results match your filters.
@@ -477,7 +551,8 @@ export function AdvancedDataTable<T extends object>({
                       onClick={() => onRowClick?.(row.original)}
                       className={cn(
                         "transition-colors",
-                        onRowClick && "cursor-pointer hover:bg-muted/40"
+                        onRowClick && "cursor-pointer hover:bg-muted/40",
+                        row.getIsSelected() && "bg-muted/30",
                       )}
                     >
                       {row.getVisibleCells().map((cell) => (
@@ -488,7 +563,7 @@ export function AdvancedDataTable<T extends object>({
                         >
                           {flexRender(
                             cell.column.columnDef.cell,
-                            cell.getContext()
+                            cell.getContext(),
                           )}
                         </TableCell>
                       ))}
