@@ -44,31 +44,23 @@ export function ChapterList() {
   ]);
 
   // Load all aliases to know which chapter names to hide from the list
-  const { data: allAliases } = useCollection<ChapterAlias>(
-    "chapter_aliases",
-    [],
-  );
+  const { data: allAliases } = useCollection<ChapterAlias>("chapter_aliases",[]);
 
   const aliasedNames = useMemo(
-    () =>
-      new Set(
-        (allAliases as (ChapterAlias & { id: string })[]).map(
-          (a) => a.aliasName,
-        ),
-      ),
-    [allAliases],
+    () => new Set((allAliases as (ChapterAlias & { id: string })[]).map((a) => a.aliasName)),
+    [allAliases]
   );
 
   // Filter out chapters whose name is an alias of another chapter
   const visibleChapters = useMemo(
     () => (chapters as ChapterRow[]).filter((c) => !aliasedNames.has(c.name)),
-    [chapters, aliasedNames],
+    [chapters, aliasedNames]
   );
 
   // Lookup maps for merged stats
   const chapterByName = useMemo(
     () => new Map((chapters as ChapterRow[]).map((c) => [c.name, c])),
-    [chapters],
+    [chapters]
   );
   const aliasesByChapterId = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -104,7 +96,7 @@ export function ChapterList() {
           totalLapsed: chapter.totalLapsed + extra.totalLapsed,
         };
       }),
-    [visibleChapters, aliasesByChapterId, chapterByName],
+    [visibleChapters, aliasesByChapterId, chapterByName]
   );
 
   const columns: ColumnDef<ChapterRow, unknown>[] = useMemo(
@@ -192,7 +184,7 @@ export function ChapterList() {
           const rate =
             row.original.totalMembers > 0
               ? Math.round(
-                  (row.original.totalActive / row.original.totalMembers) * 100,
+                  (row.original.totalActive / row.original.totalMembers) * 100
                 )
               : 0;
           return (
@@ -209,7 +201,7 @@ export function ChapterList() {
         },
       },
     ],
-    [],
+    []
   );
 
   const filteredForCards = useMemo(() => {
@@ -217,7 +209,7 @@ export function ChapterList() {
     const q = debouncedSearch.toLowerCase();
     return mergedChapters.filter(
       (c) =>
-        c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q),
+        c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q)
     );
   }, [mergedChapters, debouncedSearch]);
 
@@ -260,7 +252,9 @@ export function ChapterList() {
           emptyDescription="No chapters are available"
           emptyIcon={Building2}
           defaultPageSize={20}
-          defaultColumnFilters={[{ id: "totalActive", value: { op: ">", value: 0 } }]}
+          defaultColumnFilters={[
+            { id: "totalActive", value: { op: ">", value: 0 } },
+          ]}
           exportFilename="PNAA_chapters"
         />
       ) : loading ? (

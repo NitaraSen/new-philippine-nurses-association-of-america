@@ -42,9 +42,7 @@ const columns: ColumnDef<CampaignRow, unknown>[] = [
     enableSorting: true,
     meta: { filterType: "text" } satisfies ColumnMeta,
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.chapterName}
-      </span>
+      <span className="text-sm text-muted-foreground">{row.original.chapterName}</span>
     ),
   },
   {
@@ -132,7 +130,7 @@ export function CampaignList() {
 
   const { data: campaigns, loading } = useCollection<FundraisingCampaign>(
     "fundraising",
-    constraints,
+    constraints
   );
 
   const data = campaigns as CampaignRow[];
@@ -143,7 +141,7 @@ export function CampaignList() {
     return data.filter(
       (c) =>
         c.fundraiserName.toLowerCase().includes(q) ||
-        c.chapterName.toLowerCase().includes(q),
+        c.chapterName.toLowerCase().includes(q)
     );
   }, [data, debouncedSearch]);
 
@@ -160,9 +158,7 @@ export function CampaignList() {
       <div className="flex items-center gap-6 text-sm">
         <div>
           <span className="text-muted-foreground">Total Raised: </span>
-          <span className="font-bold text-primary">
-            {formatCurrency(totalRaised)}
-          </span>
+          <span className="font-bold text-primary">{formatCurrency(totalRaised)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Campaigns: </span>
@@ -215,9 +211,7 @@ export function CampaignList() {
           icon={DollarSign}
           title="No campaigns found"
           description={
-            search
-              ? "Try adjusting your search"
-              : "No fundraising campaigns yet"
+            search ? "Try adjusting your search" : "No fundraising campaigns yet"
           }
         />
       ) : (
