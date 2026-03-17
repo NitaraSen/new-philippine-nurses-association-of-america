@@ -44,23 +44,31 @@ export function ChapterList() {
   ]);
 
   // Load all aliases to know which chapter names to hide from the list
-  const { data: allAliases } = useCollection<ChapterAlias>("chapter_aliases", []);
+  const { data: allAliases } = useCollection<ChapterAlias>(
+    "chapter_aliases",
+    [],
+  );
 
   const aliasedNames = useMemo(
-    () => new Set((allAliases as (ChapterAlias & { id: string })[]).map((a) => a.aliasName)),
-    [allAliases]
+    () =>
+      new Set(
+        (allAliases as (ChapterAlias & { id: string })[]).map(
+          (a) => a.aliasName,
+        ),
+      ),
+    [allAliases],
   );
 
   // Filter out chapters whose name is an alias of another chapter
   const visibleChapters = useMemo(
     () => (chapters as ChapterRow[]).filter((c) => !aliasedNames.has(c.name)),
-    [chapters, aliasedNames]
+    [chapters, aliasedNames],
   );
 
   // Lookup maps for merged stats
   const chapterByName = useMemo(
     () => new Map((chapters as ChapterRow[]).map((c) => [c.name, c])),
-    [chapters]
+    [chapters],
   );
   const aliasesByChapterId = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -87,7 +95,7 @@ export function ChapterList() {
               totalLapsed: acc.totalLapsed + ac.totalLapsed,
             };
           },
-          { totalMembers: 0, totalActive: 0, totalLapsed: 0 }
+          { totalMembers: 0, totalActive: 0, totalLapsed: 0 },
         );
         return {
           ...chapter,
@@ -96,7 +104,7 @@ export function ChapterList() {
           totalLapsed: chapter.totalLapsed + extra.totalLapsed,
         };
       }),
-    [visibleChapters, aliasesByChapterId, chapterByName]
+    [visibleChapters, aliasesByChapterId, chapterByName],
   );
 
   const columns: ColumnDef<ChapterRow, unknown>[] = useMemo(
@@ -184,7 +192,7 @@ export function ChapterList() {
           const rate =
             row.original.totalMembers > 0
               ? Math.round(
-                  (row.original.totalActive / row.original.totalMembers) * 100
+                  (row.original.totalActive / row.original.totalMembers) * 100,
                 )
               : 0;
           return (
@@ -201,7 +209,7 @@ export function ChapterList() {
         },
       },
     ],
-    []
+    [],
   );
 
   const filteredForCards = useMemo(() => {
@@ -211,14 +219,15 @@ export function ChapterList() {
       (c) =>
         c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q),
     );
-  }, [visibleChapters, debouncedSearch]);
+  }, [mergedChapters, debouncedSearch]);
 
   const handleViewChange = (v: ViewMode) => {
     setView(v);
     localStorage.setItem(STORAGE_KEY, v);
   };
 
-  const hiddenCount = (chapters as ChapterRow[]).length - visibleChapters.length;
+  const hiddenCount =
+    (chapters as ChapterRow[]).length - visibleChapters.length;
 
   return (
     <div className="space-y-4">
@@ -254,7 +263,7 @@ export function ChapterList() {
           defaultColumnFilters={[
             { id: "totalActive", value: { op: ">", value: 0 } },
           ]}
-          exportFilename="PNAA-chapters"
+          exportFilename="PNAA_chapters"
         />
       ) : loading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
