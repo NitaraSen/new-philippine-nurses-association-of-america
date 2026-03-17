@@ -211,7 +211,7 @@ export function ChapterList() {
       (c) =>
         c.name.toLowerCase().includes(q) || c.region.toLowerCase().includes(q)
     );
-  }, [mergedChapters, debouncedSearch]);
+  }, [mergedChapters,debouncedSearch]);
 
   const handleViewChange = (v: ViewMode) => {
     setView(v);
