@@ -429,12 +429,20 @@ export function AdvancedDataTable<T extends object>({
       />
     ),
     cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(v) => row.toggleSelected(!!v)}
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Select row"
-      />
+      <div
+        className="flex items-center justify-center w-full py-2.5"
+        onClick={(e) => {
+          e.stopPropagation();
+          row.toggleSelected();
+        }}
+      >
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(!!v)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Select row"
+        />
+      </div>
     ),
   };
 
@@ -774,7 +782,7 @@ export function AdvancedDataTable<T extends object>({
                   className="w-full justify-start text-xs gap-1.5 mt-1"
                   onClick={() => exportToXLSX()}
                 >
-                  <Download className="h-3.5 w-3.5" />
+                <Download className="h-3.5 w-3.5" />
                   Excel file
                 </Button>
                 <Button
@@ -878,7 +886,7 @@ export function AdvancedDataTable<T extends object>({
                         <TableCell
                           key={cell.id}
                           style={{ width: cell.column.getSize() }}
-                          className="py-2.5"
+                          className={cn(cell.column.id === "select" ? "p-0" : "py-2.5")}
                         >
                           {flexRender(
                             cell.column.columnDef.cell,
