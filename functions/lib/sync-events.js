@@ -1,13 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncEvents = void 0;
-const scheduler_1 = require("firebase-functions/v2/scheduler");
+const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const firestore_1 = require("firebase-admin/firestore");
 const wa_utils_1 = require("./wa-utils");
-// Run daily at 4 AM ET as a safety-net for any events missed by the webhook.
+const WEBHOOK_SECRET = (0, params_1.defineString)("WEBHOOK_SECRET");
+// HTTP endpoint for manually triggering a full event sync.
 // Real-time event inserts, updates, and soft-deletes are handled by the
 // wildApricotWebhook function.
-exports.syncEvents = (0, scheduler_1.onSchedule)({ schedule: "every day 04:00", timeZone: "America/New_York", timeoutSeconds: 300 }, async () => {
+// Call with: POST /syncEvents?key=[WEBHOOK_SECRET]
+exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req, res) => {
+    if (req.method !== "POST") {
+        res.status(405).send("Method Not Allowed");
+        return;
+    }
+    const key = req.query["key"];
+    if (!key || key !== WEBHOOK_SECRET.value()) {
+        res.status(401).send("Unauthorized");
+        return;
+    }
     const db = (0, firestore_1.getFirestore)();
     const accessToken = await (0, wa_utils_1.getWAToken)();
     const accountId = (0, wa_utils_1.getWAAccountId)();
@@ -98,6 +110,8 @@ exports.syncEvents = (0, scheduler_1.onSchedule)({ schedule: "every day 04:00", 
     if (batchCount > 0) {
         await batch.commit();
     }
-    console.log(`syncEvents: ${added} new events added, ${skipped} skipped (already exist)`);
+    const msg = `syncEvents: ${added} new events added, ${skipped} skipped (already exist)`;
+    console.log(msg);
+    res.status(200).send(msg);
 });
 //# sourceMappingURL=sync-events.js.map
