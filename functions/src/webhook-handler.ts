@@ -10,7 +10,7 @@
  *
  * MessageType routing:
  *   Contact / Membership / MembershipRenewed
- *     → fetch single contact from WA → upsert member → recalculate affected chapter(s)
+ *     → fetch single contact from WA → upsert member → increment chapter aggregates
  *   Event (Created)
  *     → insert into Firestore if not already present (INSERT ONLY, same as syncEvents)
  *   Event (Changed)
@@ -21,14 +21,14 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import {
   getWAToken,
   getWAAccountId,
   fetchWAContact,
   fetchWAEvent,
   mapContactToMember,
-  recalculateChapterAggregates,
+  chapterSlug,
 } from "./wa-utils";
 
 const WEBHOOK_SECRET = defineString("WEBHOOK_SECRET");
@@ -104,24 +104,63 @@ async function handleContact(waContactId: string): Promise<void> {
 
   const docRef = db.collection("members").doc(member.memberId);
 
-  // Read the old chapter before overwriting so we can recalculate it too if the
-  // member moved chapters (otherwise that chapter's counts would stay stale).
+  // Read old state before overwriting so we can compute the exact chapter delta
   const oldDoc = await docRef.get();
-  const oldChapterName = oldDoc.exists
-    ? (oldDoc.data()?.chapterName as string | undefined)
-    : undefined;
+  const isNewMember = !oldDoc.exists;
+  const oldChapterName = isNewMember ? "" : ((oldDoc.data()?.chapterName as string) || "");
+  const oldActiveStatus = isNewMember
+    ? null
+    : ((oldDoc.data()?.activeStatus as "Active" | "Lapsed") || "Lapsed");
 
   await docRef.set(member, { merge: true });
 
-  const chaptersToUpdate = new Set<string>();
-  if (member.chapterName) chaptersToUpdate.add(member.chapterName);
-  if (oldChapterName && oldChapterName !== member.chapterName) {
-    chaptersToUpdate.add(oldChapterName);
+  const newChapterName = member.chapterName || "";
+  const newActiveStatus = member.activeStatus;
+  const chapterBatch = db.batch();
+  let chapterUpdates = 0;
+
+  if (oldChapterName && oldChapterName !== newChapterName) {
+    // Member left this chapter — decrement their contribution
+    const oldChapterRef = db.collection("chapters").doc(chapterSlug(oldChapterName));
+    chapterBatch.set(oldChapterRef, {
+      totalMembers: FieldValue.increment(-1),
+      ...(oldActiveStatus === "Active" && { totalActive: FieldValue.increment(-1) }),
+      ...(oldActiveStatus === "Lapsed" && { totalLapsed: FieldValue.increment(-1) }),
+      lastUpdated: Timestamp.now(),
+    }, { merge: true });
+    chapterUpdates++;
   }
 
-  if (chaptersToUpdate.size > 0) {
-    await recalculateChapterAggregates([...chaptersToUpdate]);
+  if (newChapterName) {
+    const newChapterRef = db.collection("chapters").doc(chapterSlug(newChapterName));
+
+    if (isNewMember || oldChapterName !== newChapterName) {
+      // Member joined this chapter (new member or chapter transfer)
+      chapterBatch.set(newChapterRef, {
+        name: newChapterName,
+        region: member.region,
+        totalMembers: FieldValue.increment(1),
+        ...(newActiveStatus === "Active" && { totalActive: FieldValue.increment(1) }),
+        ...(newActiveStatus === "Lapsed" && { totalLapsed: FieldValue.increment(1) }),
+        lastUpdated: Timestamp.now(),
+      }, { merge: true });
+      chapterUpdates++;
+    } else if (oldActiveStatus !== newActiveStatus) {
+      // Same chapter, status changed (e.g. admin-triggered renewal or lapse)
+      const activeDelta = newActiveStatus === "Active" ? 1 : -1;
+      chapterBatch.set(newChapterRef, {
+        name: newChapterName,
+        region: member.region,
+        totalActive: FieldValue.increment(activeDelta),
+        totalLapsed: FieldValue.increment(-activeDelta),
+        lastUpdated: Timestamp.now(),
+      }, { merge: true });
+      chapterUpdates++;
+    }
+    // else: same chapter, same status — no chapter update needed
   }
+
+  if (chapterUpdates > 0) await chapterBatch.commit();
 
   console.log(`wildApricotWebhook: updated member ${member.memberId} (${member.name})`);
 }

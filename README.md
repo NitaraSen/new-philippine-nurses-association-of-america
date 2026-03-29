@@ -87,8 +87,8 @@ A full-stack web application for managing PNAA's 55+ chapters, 4,000+ members, e
                    │
      ┌─────────────┴──────────────────┐
      │    Firebase Cloud Functions     │
-     │  • syncMembers (daily 3 AM ET) │
-     │  • syncEvents  (daily 4 AM ET) │
+     │  • syncMembers  (HTTP, manual) │
+     │  • syncEvents   (HTTP, manual) │
      │  • updateMembers (daily 2 AM)  │
      │  • wildApricotWebhook (HTTP)   │
      │  • createUser (callable)       │
@@ -157,8 +157,8 @@ philippine-nurses-association-of-america/
 ├── functions/                 # Firebase Cloud Functions
 │   └── src/
 │       ├── index.ts           # Function exports + Admin SDK init
-│       ├── sync-members.ts    # Scheduled daily member sync (3 AM ET)
-│       ├── sync-events.ts     # Scheduled daily event sync (4 AM ET)
+│       ├── sync-members.ts    # HTTP endpoint for manual full member sync
+│       ├── sync-events.ts     # HTTP endpoint for manual full event sync
 │       ├── update-members.ts  # Scheduled daily status recalculation (2 AM ET)
 │       ├── webhook-handler.ts # Real-time Wild Apricot webhook receiver
 │       ├── create-user.ts     # Callable: admin user creation
@@ -412,10 +412,10 @@ firebase deploy --only functions
 
 | Function | Trigger | Description |
 |---|---|---|
-| `syncMembers` | Scheduled (daily, 3 AM ET) | Full safety-net sync: fetches all contacts from Wild Apricot via async job polling, upserts to `members` collection in batches of 450, rebuilds chapter aggregates. Timeout: 540s. |
-| `syncEvents` | Scheduled (daily, 4 AM ET) | Safety-net sync: fetches all events from Wild Apricot, **insert-only** — existing events are never overwritten. Timeout: 300s. |
-| `updateMembers` | Scheduled (daily, 2 AM ET) | Recalculates active/lapsed status for all members based on `renewalDueDate`, rebuilds chapter aggregate totals. Writes batched at 450 to stay within Firestore limits. |
-| `wildApricotWebhook` | HTTP (POST) | Real-time webhook receiver for Wild Apricot contact, membership, and event changes. Contact/membership changes upsert the member and recalculate affected chapter aggregates. Event changes: Created = insert-only, Changed = updates WA-owned fields only (preserves app fields), Deleted = soft-delete (`archived: true`). Always returns 200 to prevent WA retry loops. |
+| `syncMembers` | HTTP (POST, manual) | Full member sync: fetches all contacts from Wild Apricot via async job polling, upserts to `members` collection in batches of 450, rebuilds chapter aggregates. Secured with `?key=[WEBHOOK_SECRET]`. Timeout: 540s. |
+| `syncEvents` | HTTP (POST, manual) | Full event sync: fetches all events from Wild Apricot, **insert-only** — existing events are never overwritten. Secured with `?key=[WEBHOOK_SECRET]`. Timeout: 300s. |
+| `updateMembers` | Scheduled (daily, 2 AM ET) | Queries only `Active` members whose `renewalDueDate` has passed and flips them to `Lapsed`. Updates chapter aggregates via `FieldValue.increment` — no full member re-read required. |
+| `wildApricotWebhook` | HTTP (POST) | Real-time webhook receiver for Wild Apricot contact, membership, and event changes. Contact/membership changes upsert the member and update chapter aggregates via increments (old/new delta). Event changes: Created = insert-only, Changed = updates WA-owned fields only (preserves app fields), Deleted = soft-delete (`archived: true`). Always returns 200 to prevent WA retry loops. |
 | `createUser` | Callable | Creates a Firebase Auth user and Firestore user document with role/chapter/region. Restricted to `national_admin` callers. |
 
 ### Webhook Configuration
@@ -432,10 +432,10 @@ Configure in Wild Apricot (Apps > Integrations > Webhooks):
 
 ### Data Sync Strategy
 
-- **Real-time**: The webhook handler processes individual contact/event changes as they happen in Wild Apricot
-- **Daily safety-net**: Scheduled functions run overnight to catch anything missed by webhooks
-- **Execution order**: `updateMembers` (2 AM) → `syncMembers` (3 AM) → `syncEvents` (4 AM)
-- **Chapter aggregates**: Always rebuilt from scratch (not incremental), so partial syncs produce accurate counts
+- **Real-time**: The webhook handler processes individual contact/event changes as they happen in Wild Apricot. Chapter aggregates are updated via `FieldValue.increment` using the old/new member delta — no member re-reads required.
+- **Manual full sync**: `syncMembers` and `syncEvents` are HTTP endpoints (no schedule). Trigger them via `POST /syncMembers?key=[WEBHOOK_SECRET]` and `POST /syncEvents?key=[WEBHOOK_SECRET]` when a full re-sync is needed (e.g. after a gap in webhook coverage or initial setup).
+- **Daily status update**: `updateMembers` runs at 2 AM ET, querying only `Active` members with an expired `renewalDueDate`. On a typical day this touches tens to a few hundred documents rather than the full membership, and updates chapter counts via increments.
+- **Chapter aggregates**: The webhook and `updateMembers` use incremental updates. `syncMembers` rebuilds aggregates from scratch from the in-memory contact list during a full sync. `recalculateChapterAggregates` in `wa-utils.ts` is available as a manual recovery utility if counts drift.
 
 ---
 
