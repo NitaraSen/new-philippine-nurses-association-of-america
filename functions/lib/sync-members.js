@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncMembers = void 0;
-const scheduler_1 = require("firebase-functions/v2/scheduler");
+const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const firestore_1 = require("firebase-admin/firestore");
 const wa_utils_1 = require("./wa-utils");
+const WEBHOOK_SECRET = (0, params_1.defineString)("WEBHOOK_SECRET");
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
@@ -70,9 +72,19 @@ async function fetchAllWAContacts(accessToken, accountId) {
     }
     return allContacts;
 }
-// Run daily at 3 AM ET as a full safety-net sync.
+// HTTP endpoint for manually triggering a full member sync.
 // Real-time updates are handled by the wildApricotWebhook function.
-exports.syncMembers = (0, scheduler_1.onSchedule)({ schedule: "every day 03:00", timeZone: "America/New_York", timeoutSeconds: 540 }, async () => {
+// Call with: POST /syncMembers?key=[WEBHOOK_SECRET]
+exports.syncMembers = (0, https_1.onRequest)({ timeoutSeconds: 540 }, async (req, res) => {
+    if (req.method !== "POST") {
+        res.status(405).send("Method Not Allowed");
+        return;
+    }
+    const key = req.query["key"];
+    if (!key || key !== WEBHOOK_SECRET.value()) {
+        res.status(401).send("Unauthorized");
+        return;
+    }
     const db = (0, firestore_1.getFirestore)();
     const accessToken = await (0, wa_utils_1.getWAToken)();
     const accountId = (0, wa_utils_1.getWAAccountId)();
@@ -150,7 +162,9 @@ exports.syncMembers = (0, scheduler_1.onSchedule)({ schedule: "every day 03:00",
         }, { merge: true });
     }
     await chapterBatch.commit();
-    console.log(`syncMembers: processed ${processed} contacts, ` +
-        `updated ${Object.keys(chapterCounts).length} chapters`);
+    const msg = `syncMembers: processed ${processed} contacts, ` +
+        `updated ${Object.keys(chapterCounts).length} chapters`;
+    console.log(msg);
+    res.status(200).send(msg);
 });
 //# sourceMappingURL=sync-members.js.map

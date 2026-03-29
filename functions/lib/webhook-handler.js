@@ -11,7 +11,7 @@
  *
  * MessageType routing:
  *   Contact / Membership / MembershipRenewed
- *     → fetch single contact from WA → upsert member → recalculate affected chapter(s)
+ *     → fetch single contact from WA → upsert member → increment chapter aggregates
  *   Event (Created)
  *     → insert into Firestore if not already present (INSERT ONLY, same as syncEvents)
  *   Event (Changed)
@@ -80,22 +80,59 @@ async function handleContact(waContactId) {
         return;
     }
     const docRef = db.collection("members").doc(member.memberId);
-    // Read the old chapter before overwriting so we can recalculate it too if the
-    // member moved chapters (otherwise that chapter's counts would stay stale).
+    // Read old state before overwriting so we can compute the exact chapter delta
     const oldDoc = await docRef.get();
-    const oldChapterName = oldDoc.exists
-        ? oldDoc.data()?.chapterName
-        : undefined;
+    const isNewMember = !oldDoc.exists;
+    const oldChapterName = isNewMember ? "" : (oldDoc.data()?.chapterName || "");
+    const oldActiveStatus = isNewMember
+        ? null
+        : (oldDoc.data()?.activeStatus || "Lapsed");
     await docRef.set(member, { merge: true });
-    const chaptersToUpdate = new Set();
-    if (member.chapterName)
-        chaptersToUpdate.add(member.chapterName);
-    if (oldChapterName && oldChapterName !== member.chapterName) {
-        chaptersToUpdate.add(oldChapterName);
+    const newChapterName = member.chapterName || "";
+    const newActiveStatus = member.activeStatus;
+    const chapterBatch = db.batch();
+    let chapterUpdates = 0;
+    if (oldChapterName && oldChapterName !== newChapterName) {
+        // Member left this chapter — decrement their contribution
+        const oldChapterRef = db.collection("chapters").doc((0, wa_utils_1.chapterSlug)(oldChapterName));
+        chapterBatch.set(oldChapterRef, {
+            totalMembers: firestore_1.FieldValue.increment(-1),
+            ...(oldActiveStatus === "Active" && { totalActive: firestore_1.FieldValue.increment(-1) }),
+            ...(oldActiveStatus === "Lapsed" && { totalLapsed: firestore_1.FieldValue.increment(-1) }),
+            lastUpdated: firestore_1.Timestamp.now(),
+        }, { merge: true });
+        chapterUpdates++;
     }
-    if (chaptersToUpdate.size > 0) {
-        await (0, wa_utils_1.recalculateChapterAggregates)([...chaptersToUpdate]);
+    if (newChapterName) {
+        const newChapterRef = db.collection("chapters").doc((0, wa_utils_1.chapterSlug)(newChapterName));
+        if (isNewMember || oldChapterName !== newChapterName) {
+            // Member joined this chapter (new member or chapter transfer)
+            chapterBatch.set(newChapterRef, {
+                name: newChapterName,
+                region: member.region,
+                totalMembers: firestore_1.FieldValue.increment(1),
+                ...(newActiveStatus === "Active" && { totalActive: firestore_1.FieldValue.increment(1) }),
+                ...(newActiveStatus === "Lapsed" && { totalLapsed: firestore_1.FieldValue.increment(1) }),
+                lastUpdated: firestore_1.Timestamp.now(),
+            }, { merge: true });
+            chapterUpdates++;
+        }
+        else if (oldActiveStatus !== newActiveStatus) {
+            // Same chapter, status changed (e.g. admin-triggered renewal or lapse)
+            const activeDelta = newActiveStatus === "Active" ? 1 : -1;
+            chapterBatch.set(newChapterRef, {
+                name: newChapterName,
+                region: member.region,
+                totalActive: firestore_1.FieldValue.increment(activeDelta),
+                totalLapsed: firestore_1.FieldValue.increment(-activeDelta),
+                lastUpdated: firestore_1.Timestamp.now(),
+            }, { merge: true });
+            chapterUpdates++;
+        }
+        // else: same chapter, same status — no chapter update needed
     }
+    if (chapterUpdates > 0)
+        await chapterBatch.commit();
     console.log(`wildApricotWebhook: updated member ${member.memberId} (${member.name})`);
 }
 async function handleEvent(eventId, action) {
