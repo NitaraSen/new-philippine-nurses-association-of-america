@@ -1,4 +1,5 @@
-import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onRequest } from "firebase-functions/v2/https";
+import { defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   getWAToken,
@@ -7,6 +8,8 @@ import {
   chapterSlug,
   MemberData,
 } from "./wa-utils";
+
+const WEBHOOK_SECRET = defineString("WEBHOOK_SECRET");
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -90,11 +93,23 @@ async function fetchAllWAContacts(
   return allContacts;
 }
 
-// Run daily at 3 AM ET as a full safety-net sync.
+// HTTP endpoint for manually triggering a full member sync.
 // Real-time updates are handled by the wildApricotWebhook function.
-export const syncMembers = onSchedule(
-  { schedule: "every day 03:00", timeZone: "America/New_York", timeoutSeconds: 540 },
-  async () => {
+// Call with: POST /syncMembers?key=[WEBHOOK_SECRET]
+export const syncMembers = onRequest(
+  { timeoutSeconds: 540 },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const key = req.query["key"] as string | undefined;
+    if (!key || key !== WEBHOOK_SECRET.value()) {
+      res.status(401).send("Unauthorized");
+      return;
+    }
+
     const db = getFirestore();
     const accessToken = await getWAToken();
     const accountId = getWAAccountId();
@@ -199,9 +214,10 @@ export const syncMembers = onSchedule(
 
     await chapterBatch.commit();
 
-    console.log(
+    const msg =
       `syncMembers: processed ${processed} contacts, ` +
-        `updated ${Object.keys(chapterCounts).length} chapters`
-    );
+      `updated ${Object.keys(chapterCounts).length} chapters`;
+    console.log(msg);
+    res.status(200).send(msg);
   }
 );

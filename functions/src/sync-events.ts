@@ -1,13 +1,28 @@
-import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onRequest } from "firebase-functions/v2/https";
+import { defineString } from "firebase-functions/params";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getWAToken, getWAAccountId } from "./wa-utils";
 
-// Run daily at 4 AM ET as a safety-net for any events missed by the webhook.
+const WEBHOOK_SECRET = defineString("WEBHOOK_SECRET");
+
+// HTTP endpoint for manually triggering a full event sync.
 // Real-time event inserts, updates, and soft-deletes are handled by the
 // wildApricotWebhook function.
-export const syncEvents = onSchedule(
-  { schedule: "every day 04:00", timeZone: "America/New_York", timeoutSeconds: 300 },
-  async () => {
+// Call with: POST /syncEvents?key=[WEBHOOK_SECRET]
+export const syncEvents = onRequest(
+  { timeoutSeconds: 300 },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const key = req.query["key"] as string | undefined;
+    if (!key || key !== WEBHOOK_SECRET.value()) {
+      res.status(401).send("Unauthorized");
+      return;
+    }
+
     const db = getFirestore();
     const accessToken = await getWAToken();
     const accountId = getWAAccountId();
@@ -117,8 +132,8 @@ export const syncEvents = onSchedule(
       await batch.commit();
     }
 
-    console.log(
-      `syncEvents: ${added} new events added, ${skipped} skipped (already exist)`
-    );
+    const msg = `syncEvents: ${added} new events added, ${skipped} skipped (already exist)`;
+    console.log(msg);
+    res.status(200).send(msg);
   }
 );
