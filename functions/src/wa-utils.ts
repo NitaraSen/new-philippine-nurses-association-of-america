@@ -156,6 +156,44 @@ export async function fetchWAEvent(
   return response.json() as Promise<Record<string, unknown>>;
 }
 
+/**
+ * Fetches all registrations for a single WA event.
+ * Used by the webhook handler for per-event attendee sync.
+ * Returns [] on 404 or empty response.
+ */
+export async function fetchWAEventRegistrations(
+  accessToken: string,
+  accountId: string,
+  eventId: string | number
+): Promise<Array<{ contactId: string; name: string }>> {
+  const url =
+    `https://api.wildapricot.org/v2/accounts/${accountId}/eventregistrations` +
+    `?eventId=${eventId}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    if (response.status === 404) return [];
+    throw new Error(
+      `WA event registrations fetch failed (event ${eventId}): ${response.statusText}`
+    );
+  }
+  const data = await response.json();
+  const registrations: Record<string, unknown>[] = Array.isArray(data)
+    ? data
+    : (data.Registrations ?? []);
+  return registrations.map((reg) => {
+    const contact = (reg.Contact ?? {}) as Record<string, unknown>;
+    return {
+      contactId: String(contact.Id ?? ""),
+      name: String(contact.Name ?? ""),
+    };
+  });
+}
+
 /** Converts a chapter name to its Firestore document slug. */
 export function chapterSlug(chapterName: string): string {
   return chapterName
