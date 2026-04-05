@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDocument } from "@/hooks/use-firestore";
+import { useDocument, useCollection } from "@/hooks/use-firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,9 +11,13 @@ import { formatDate, formatDateRange } from "@/lib/utils";
 import { Pencil, Calendar, MapPin, Clock, Building2 } from "lucide-react";
 import { useIsAdmin } from "@/hooks/use-auth";
 import type { AppEvent } from "@/types/event";
+import type { EventAttendee } from "@/types/attendee";
 
 export function EventDetail({ eventId }: { eventId: string }) {
   const { data: event, loading } = useDocument<AppEvent>("events", eventId);
+  const { data: attendees, loading: attendeesLoading } = useCollection<EventAttendee>(
+    `events/${eventId}/attendees`
+  );
   const isAdmin = useIsAdmin();
 
   if (loading) {
@@ -112,6 +116,34 @@ export function EventDetail({ eventId }: { eventId: string }) {
 
       {/* Metrics */}
       <EventMetrics event={event} />
+
+      {/* Attendees — WA-sourced events only */}
+      {event.source === "wildapricot" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Registrations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {attendeesLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-52" />
+              </div>
+            ) : attendees.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No registrations recorded yet.</p>
+            ) : (
+              <ul className="divide-y">
+                {attendees.map((attendee) => (
+                  <li key={attendee.contactId} className="py-2 text-sm">
+                    {attendee.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

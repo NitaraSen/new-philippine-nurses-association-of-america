@@ -196,7 +196,9 @@ export const syncEvents = onRequest(
         const contactId = String(contact.Id ?? "");
         if (!contactId) continue;
 
+        const registrationId = String(reg.Id ?? "");
         attendeeBatch.set(eventRef.collection("attendees").doc(contactId), {
+          registrationId,
           contactId,
           memberId: null,
           name: String(contact.Name ?? ""),

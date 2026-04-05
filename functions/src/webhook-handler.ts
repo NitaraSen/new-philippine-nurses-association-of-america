@@ -27,6 +27,7 @@ import {
   getWAAccountId,
   fetchWAContact,
   fetchWAEvent,
+  fetchWARegistration,
   mapContactToMember,
   chapterSlug,
 } from "./wa-utils";
@@ -70,6 +71,14 @@ export const wildApricotWebhook = onRequest(async (req, res) => {
         const eventId = String(Parameters["Event.Id"]);
         const action = String(Parameters["Action"]) as "Created" | "Changed" | "Deleted";
         await handleEvent(eventId, action);
+        break;
+      }
+
+      case "EventRegistration": {
+        const eventId = String(Parameters["EventToRegister.Id"]);
+        const registrationId = String(Parameters["Registration.Id"]);
+        const action = String(Parameters["Action"]) as "Created" | "Changed" | "Deleted";
+        await handleEventRegistration(eventId, registrationId, action);
         break;
       }
 
@@ -163,6 +172,74 @@ async function handleContact(waContactId: string): Promise<void> {
   if (chapterUpdates > 0) await chapterBatch.commit();
 
   console.log(`wildApricotWebhook: updated member ${member.memberId} (${member.name})`);
+}
+
+async function handleEventRegistration(
+  eventId: string,
+  registrationId: string,
+  action: "Created" | "Changed" | "Deleted"
+): Promise<void> {
+  const db = getFirestore();
+  const eventRef = db.collection("events").doc(eventId);
+
+  if (action === "Deleted") {
+    // Find the attendee doc by registrationId (we don't have contactId from the payload)
+    const snapshot = await eventRef
+      .collection("attendees")
+      .where("registrationId", "==", registrationId)
+      .limit(1)
+      .get();
+
+    if (!snapshot.empty) {
+      const batch = db.batch();
+      batch.delete(snapshot.docs[0].ref);
+      batch.update(eventRef, {
+        attendees: FieldValue.increment(-1),
+        lastUpdated: Timestamp.now(),
+        lastUpdatedUser: "WildApricot",
+      });
+      await batch.commit();
+      console.log(`wildApricotWebhook: deleted attendee registration ${registrationId} from event ${eventId}`);
+    }
+    return;
+  }
+
+  const token = await getWAToken();
+  const accountId = getWAAccountId();
+
+  const registration = await fetchWARegistration(token, accountId, registrationId);
+  if (!registration) {
+    console.log(`wildApricotWebhook: registration ${registrationId} not found in WA`);
+    return;
+  }
+
+  const attendeeRef = eventRef.collection("attendees").doc(registration.contactId);
+
+  if (action === "Created") {
+    const batch = db.batch();
+    batch.set(attendeeRef, {
+      registrationId: registration.registrationId,
+      contactId: registration.contactId,
+      memberId: null,
+      name: registration.name,
+    });
+    batch.update(eventRef, {
+      attendees: FieldValue.increment(1),
+      lastUpdated: Timestamp.now(),
+      lastUpdatedUser: "WildApricot",
+    });
+    await batch.commit();
+    console.log(`wildApricotWebhook: added attendee ${registration.contactId} to event ${eventId}`);
+  } else if (action === "Changed") {
+    // Changed — overwrite attendee doc, no count change
+    await attendeeRef.set({
+      registrationId: registration.registrationId,
+      contactId: registration.contactId,
+      memberId: null,
+      name: registration.name,
+    });
+    console.log(`wildApricotWebhook: updated attendee ${registration.contactId} on event ${eventId}`);
+  }
 }
 
 async function handleEvent(

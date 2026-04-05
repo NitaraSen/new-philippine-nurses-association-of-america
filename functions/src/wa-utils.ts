@@ -165,7 +165,7 @@ export async function fetchWAEventRegistrations(
   accessToken: string,
   accountId: string,
   eventId: string | number
-): Promise<Array<{ contactId: string; name: string }>> {
+): Promise<Array<{ registrationId: string; contactId: string; name: string }>> {
   const url =
     `https://api.wildapricot.org/v2/accounts/${accountId}/eventregistrations` +
     `?eventId=${eventId}`;
@@ -188,10 +188,43 @@ export async function fetchWAEventRegistrations(
   return registrations.map((reg) => {
     const contact = (reg.Contact ?? {}) as Record<string, unknown>;
     return {
+      registrationId: String(reg.Id ?? ""),
       contactId: String(contact.Id ?? ""),
       name: String(contact.Name ?? ""),
     };
   });
+}
+
+/**
+ * Fetches a single WA event registration by its registration ID.
+ * Used by the webhook handler for Created/Changed/Deleted registration events.
+ * Returns null if not found.
+ */
+export async function fetchWARegistration(
+  accessToken: string,
+  accountId: string,
+  registrationId: string | number
+): Promise<{ registrationId: string; contactId: string; name: string } | null> {
+  const url = `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations/${registrationId}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(
+      `WA registration fetch failed (${registrationId}): ${response.statusText}`
+    );
+  }
+  const reg = await response.json() as Record<string, unknown>;
+  const contact = (reg.Contact ?? {}) as Record<string, unknown>;
+  return {
+    registrationId: String(reg.Id ?? ""),
+    contactId: String(contact.Id ?? ""),
+    name: String(contact.Name ?? ""),
+  };
 }
 
 /** Converts a chapter name to its Firestore document slug. */
