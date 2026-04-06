@@ -134,79 +134,123 @@ export const syncEvents = onRequest(
 
     console.log(`syncEvents: ${added} new events added, ${skipped} skipped (already exist)`);
 
-    // Fetch registrations for every event and write to attendees subcollection
+    // Fields used for diffing attendee docs — add new fields here to include them in future comparisons
+    const FIELDS_TO_COMPARE: (keyof typeof emptyAttendee)[] = [
+      "registrationId", "eventId", "contactId", "name",
+      "registrationTypeId", "registrationType", "organization",
+      "isPaid", "registrationFee", "paidSum", "OnWaitlist", "Status",
+    ];
+    const emptyAttendee = {
+      registrationId: "", eventId: "", contactId: "", name: "",
+      registrationTypeId: "", registrationType: "", organization: "",
+      isPaid: false, registrationFee: 0, paidSum: 0, OnWaitlist: false, Status: "",
+    };
 
-    //TODO: link to users
-    //TODO: handle updates/deletes (currently only adds new registrations, but doesn't remove old ones if they were deleted in WA)
     let attendeeBatch = db.batch();
     let attendeeBatchCount = 0;
     let totalAttendees = 0;
+    let totalAdded = 0;
+    let totalUpdated = 0;
+    let totalDeleted = 0;
 
     for (const event of allWAEvents) {
       const eventId = String(event.Id);
-
-       // Fetch registrations for this event (authentication included)
-      const regUrl =
-        `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations` +
-        `?eventId=${eventId}`;
-
-     
-      const regResponse = await fetch(regUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!regResponse.ok) {
-        console.error(`Registrations fetch failed for event ${eventId}: ${regResponse.statusText}`);
-        continue;
-      }
-
-      // WA event registrations API may return a plain array or { Registrations: [...] }
-      const regData = await regResponse.json();
-      const registrations: Record<string, unknown>[] = Array.isArray(regData)
-        ? regData
-        : (regData.Registrations ?? []);
-
       const eventRef = db.collection("events").doc(eventId);
 
+      // Paginate through all registrations for this event
+      const REG_PAGE_SIZE = 100;
+      let regSkip = 0;
+      const allRegistrations: Record<string, unknown>[] = [];
+      let regFetchFailed = false;
 
-      // Delete existing attendees subcollection docs (full replace)
-     
-      // NOTE: this will cause additional reads, but ensures that registrations
-      // are consistent with Wild Apricot (for deleltes/changes)
-      // Potential improvement: instead of full replace, do diff and only update 
-      // changed/new/deleted registrations (more complex but saves reads/writes)
+      while (true) {
+        const regUrl =
+          `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations` +
+          `?eventId=${eventId}&$top=${REG_PAGE_SIZE}&$skip=${regSkip}`;
 
-      const existingAttendees = await eventRef.collection("attendees").get();
-      for (const doc of existingAttendees.docs) {
-        attendeeBatch.delete(doc.ref);
-        attendeeBatchCount++;
-        if (attendeeBatchCount === 450) {
-          await attendeeBatch.commit();
-          attendeeBatch = db.batch();
-          attendeeBatchCount = 0;
+        const regResponse = await fetch(regUrl, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (!regResponse.ok) {
+          console.error(`Registrations fetch failed for event ${eventId} at skip=${regSkip}: ${regResponse.statusText}`);
+          regFetchFailed = true;
+          break;
         }
+
+        const regData = await regResponse.json();
+        const page: Record<string, unknown>[] = Array.isArray(regData)
+          ? regData
+          : (regData.Registrations ?? []);
+
+        allRegistrations.push(...page);
+        regSkip += page.length;
+        if (page.length < REG_PAGE_SIZE) break;
       }
 
-      // Write new attendee docs for this event
-      for (const reg of registrations) {
+      // Skip diffing this event if the fetch failed — preserve existing attendees
+      if (regFetchFailed) continue;
+
+      // Build a Map of incoming WA registrations keyed by registrationId
+      const waMap = new Map<string, typeof emptyAttendee>();
+      for (const reg of allRegistrations) {
         const contact = (reg.Contact ?? {}) as Record<string, unknown>;
-        const contactId = String(contact.Id ?? "");
-        if (!contactId) continue;
+        const regEvent = (reg.Event ?? {}) as Record<string, unknown>;
+        const regType = (reg.RegistrationType ?? {}) as Record<string, unknown>;
 
         const registrationId = String(reg.Id ?? "");
-        attendeeBatch.set(eventRef.collection("attendees").doc(contactId), {
-          registrationId,
-          contactId,
-          memberId: null,
-          name: String(contact.Name ?? ""),
-        });
-        attendeeBatchCount++;
-        totalAttendees++;
+        const contactId = String(contact.Id ?? "");
+        const guestReg = Boolean(reg.IsGuestRegistration ?? false);
+        if (!registrationId || !contactId) continue;
 
-        // Commit in batches of 450 to avoid Firestore limits
+        waMap.set(registrationId, {
+          registrationId,
+          eventId: String(regEvent.Id ?? ""),
+          contactId,
+          name: String(reg.DisplayName ?? ""),
+          registrationTypeId: String(regType.Id ?? ""),
+          registrationType: String(regType.Name ?? ""),
+          organization: String(reg.Organization ?? ""),
+          isPaid: Boolean(reg.IsPaid ?? false),
+          registrationFee: Number(reg.RegistrationFee ?? 0),
+          paidSum: Number(reg.PaidSum ?? 0),
+          OnWaitlist: Boolean(reg.OnWaitlist ?? false),
+          Status: String(reg.Status ?? ""),
+        });
+      }
+
+      // Read existing attendees from Firestore into a Map
+      const existingSnap = await eventRef.collection("attendees").get();
+      const existingMap = new Map<string, Record<string, unknown>>();
+      for (const doc of existingSnap.docs) {
+        existingMap.set(doc.id, doc.data());
+      }
+
+      // Diff: add new, update changed, delete removed
+      for (const [id, incoming] of waMap) {
+        const existing = existingMap.get(id);
+        if (!existing) {
+          // New registration
+          attendeeBatch.set(eventRef.collection("attendees").doc(id), incoming);
+          attendeeBatchCount++;
+          totalAdded++;
+          totalAttendees++;
+        } else {
+          // Check if any field changed
+          const hasChanged = FIELDS_TO_COMPARE.some(
+            (field) => incoming[field] !== existing[field]
+          );
+          if (hasChanged) {
+            attendeeBatch.set(eventRef.collection("attendees").doc(id), incoming);
+            attendeeBatchCount++;
+            totalUpdated++;
+          }
+          totalAttendees++;
+        }
+
         if (attendeeBatchCount === 450) {
           await attendeeBatch.commit();
           attendeeBatch = db.batch();
@@ -214,15 +258,28 @@ export const syncEvents = onRequest(
         }
       }
 
-      // Update attendees count on the event doc
+      for (const [id] of existingMap) {
+        if (!waMap.has(id)) {
+          attendeeBatch.delete(eventRef.collection("attendees").doc(id));
+          attendeeBatchCount++;
+          totalDeleted++;
+
+          if (attendeeBatchCount === 450) {
+            await attendeeBatch.commit();
+            attendeeBatch = db.batch();
+            attendeeBatchCount = 0;
+          }
+        }
+      }
+
+      // Always update attendees count on the event doc
       attendeeBatch.update(eventRef, {
-        attendees: registrations.length,
+        attendees: waMap.size,
         lastUpdated: Timestamp.now(),
         lastUpdatedUser: "WildApricot",
       });
       attendeeBatchCount++;
 
-      // Commit in batches of 450 to avoid Firestore limits
       if (attendeeBatchCount === 450) {
         await attendeeBatch.commit();
         attendeeBatch = db.batch();
@@ -236,7 +293,8 @@ export const syncEvents = onRequest(
 
     const msg =
       `syncEvents: ${added} new events added, ${skipped} skipped; ` +
-      `${totalAttendees} attendees written across ${allWAEvents.length} events`;
+      `attendees: ${totalAdded} added, ${totalUpdated} updated, ${totalDeleted} deleted ` +
+      `(${totalAttendees} total across ${allWAEvents.length} events)`;
     console.log(msg);
     res.status(200).send(msg);
   }

@@ -181,18 +181,14 @@ async function handleEventRegistration(
 ): Promise<void> {
   const db = getFirestore();
   const eventRef = db.collection("events").doc(eventId);
+  // Doc ID is registrationId so Deleted can target it directly without a query
+  const attendeeRef = eventRef.collection("attendees").doc(registrationId);
 
   if (action === "Deleted") {
-    // Find the attendee doc by registrationId (we don't have contactId from the payload)
-    const snapshot = await eventRef
-      .collection("attendees")
-      .where("registrationId", "==", registrationId)
-      .limit(1)
-      .get();
-
-    if (!snapshot.empty) {
+    const existing = await attendeeRef.get();
+    if (existing.exists) {
       const batch = db.batch();
-      batch.delete(snapshot.docs[0].ref);
+      batch.delete(attendeeRef);
       batch.update(eventRef, {
         attendees: FieldValue.increment(-1),
         lastUpdated: Timestamp.now(),
@@ -213,32 +209,54 @@ async function handleEventRegistration(
     return;
   }
 
-  const attendeeRef = eventRef.collection("attendees").doc(registration.contactId);
+  const attendeeData = {
+    registrationId: registration.registrationId,
+    eventId: registration.eventId,
+    contactId: registration.contactId,
+    name: registration.name,
+    registrationTypeId: registration.registrationTypeId,
+    registrationType: registration.registrationType,
+    organization: registration.organization,
+    isPaid: registration.isPaid,
+    registrationFee: registration.registrationFee,
+    paidSum: registration.paidSum,
+    OnWaitlist: registration.OnWaitlist,
+    Status: registration.Status,
+  };
 
   if (action === "Created") {
+    const existingAttendee = await attendeeRef.get();
+    if (existingAttendee.exists) {
+      // Already exists — update without incrementing count
+      await attendeeRef.set(attendeeData);
+      console.log(`wildApricotWebhook: updated existing attendee registration ${registrationId} on event ${eventId}`);
+      return;
+    }
+
+    const eventDoc = await eventRef.get();
+    if (!eventDoc.exists) {
+      console.log(`wildApricotWebhook: event ${eventId} not found, skipping attendee creation`);
+      return;
+    }
+
     const batch = db.batch();
-    batch.set(attendeeRef, {
-      registrationId: registration.registrationId,
-      contactId: registration.contactId,
-      memberId: null,
-      name: registration.name,
-    });
+    batch.set(attendeeRef, attendeeData);
     batch.update(eventRef, {
       attendees: FieldValue.increment(1),
       lastUpdated: Timestamp.now(),
       lastUpdatedUser: "WildApricot",
     });
     await batch.commit();
-    console.log(`wildApricotWebhook: added attendee ${registration.contactId} to event ${eventId}`);
-  } else if (action === "Changed") {
-    // Changed — overwrite attendee doc, no count change
-    await attendeeRef.set({
-      registrationId: registration.registrationId,
-      contactId: registration.contactId,
-      memberId: null,
-      name: registration.name,
-    });
-    console.log(`wildApricotWebhook: updated attendee ${registration.contactId} on event ${eventId}`);
+    console.log(`wildApricotWebhook: added attendee registration ${registrationId} to event ${eventId}`);
+  } else {
+    // Changed — overwrite doc, no count change
+    const existingAttendee = await attendeeRef.get();
+    if (!existingAttendee.exists) {
+      console.log(`wildApricotWebhook: attendee registration ${registrationId} not found on event ${eventId}, skipping update`);
+      return;
+    }
+    await attendeeRef.set(attendeeData);
+    console.log(`wildApricotWebhook: updated attendee registration ${registrationId} on event ${eventId}`);
   }
 }
 

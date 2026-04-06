@@ -165,9 +165,22 @@ export async function fetchWAEventRegistrations(
   accessToken: string,
   accountId: string,
   eventId: string | number
-): Promise<Array<{ registrationId: string; contactId: string; name: string }>> {
+): Promise<Array<{
+  registrationId: string;
+  eventId: string;
+  contactId: string;
+  name: string;
+  registrationTypeId: string;
+  registrationType: string;
+  organization: string;
+  isPaid: boolean;
+  registrationFee: number;
+  paidSum: number;
+  OnWaitlist: boolean;
+  Status: string;
+}>> {
   const url =
-    `https://api.wildapricot.org/v2/accounts/${accountId}/eventregistrations` +
+    `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations` +
     `?eventId=${eventId}`;
   const response = await fetch(url, {
     headers: {
@@ -187,10 +200,21 @@ export async function fetchWAEventRegistrations(
     : (data.Registrations ?? []);
   return registrations.map((reg) => {
     const contact = (reg.Contact ?? {}) as Record<string, unknown>;
+    const regType = (reg.RegistrationType ?? {}) as Record<string, unknown>;
+    const event = (reg.Event ?? {}) as Record<string, unknown>;
     return {
       registrationId: String(reg.Id ?? ""),
+      eventId: String(event.Id ?? ""),
       contactId: String(contact.Id ?? ""),
       name: String(contact.Name ?? ""),
+      registrationTypeId: String(reg.RegistrationTypeId ?? ""),
+      registrationType: String(regType.Name ?? ""),
+      organization: String(reg.Organization ?? ""),
+      isPaid: Boolean(reg.IsPaid ?? false),
+      registrationFee: Number(reg.RegistrationFee ?? 0),
+      paidSum: Number(reg.PaidSum ?? 0),
+      OnWaitlist: Boolean(reg.OnWaitlist ?? false),
+      Status: String(reg.Status ?? ""),
     };
   });
 }
@@ -204,7 +228,20 @@ export async function fetchWARegistration(
   accessToken: string,
   accountId: string,
   registrationId: string | number
-): Promise<{ registrationId: string; contactId: string; name: string } | null> {
+): Promise<{
+  registrationId: string;
+  eventId: string;
+  contactId: string;
+  name: string;
+  registrationTypeId: string;
+  registrationType: string;
+  organization: string;
+  isPaid: boolean;
+  registrationFee: number;
+  paidSum: number;
+  OnWaitlist: boolean;
+  Status: string;
+} | null> {
   const url = `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations/${registrationId}`;
   const response = await fetch(url, {
     headers: {
@@ -220,10 +257,21 @@ export async function fetchWARegistration(
   }
   const reg = await response.json() as Record<string, unknown>;
   const contact = (reg.Contact ?? {}) as Record<string, unknown>;
+  const regType = (reg.RegistrationType ?? {}) as Record<string, unknown>;
+  const event = (reg.Event ?? {}) as Record<string, unknown>;
   return {
     registrationId: String(reg.Id ?? ""),
+    eventId: String(event.Id ?? ""),
     contactId: String(contact.Id ?? ""),
     name: String(contact.Name ?? ""),
+    registrationTypeId: String(reg.RegistrationTypeId ?? ""),
+    registrationType: String(regType.Name ?? ""),
+    organization: String(reg.Organization ?? ""),
+    isPaid: Boolean(reg.IsPaid ?? false),
+    registrationFee: Number(reg.RegistrationFee ?? 0),
+    paidSum: Number(reg.PaidSum ?? 0),
+    OnWaitlist: Boolean(reg.OnWaitlist ?? false),
+    Status: String(reg.Status ?? ""),
   };
 }
 
