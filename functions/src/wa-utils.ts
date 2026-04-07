@@ -156,6 +156,132 @@ export async function fetchWAEvent(
   return response.json() as Promise<Record<string, unknown>>;
 }
 
+/**
+ * Fetches all registrations for a single WA event.
+ * Used by the webhook handler for per-event attendee sync.
+ * Returns [] on 404 or empty response.
+ */
+export async function fetchWAEventRegistrations(
+  accessToken: string,
+  accountId: string,
+  eventId: string | number
+): Promise<Array<{
+  registrationId: string;
+  eventId: string;
+  contactId: string;
+  name: string;
+  registrationTypeId: string;
+  registrationType: string;
+  organization: string;
+  isPaid: boolean;
+  registrationFee: number;
+  paidSum: number;
+  OnWaitlist: boolean;
+  Status: string;
+}>> {
+  const url =
+    `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations` +
+    `?eventId=${eventId}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    if (response.status === 404) return [];
+    throw new Error(
+      `WA event registrations fetch failed (event ${eventId}): ${response.statusText}`
+    );
+  }
+  const data = await response.json();
+  const registrations: Record<string, unknown>[] = Array.isArray(data)
+    ? data
+    : (data.Registrations ?? []);
+  return registrations.map((reg) => {
+    const contact = (reg.Contact ?? {}) as Record<string, unknown>;
+    const regType = (reg.RegistrationType ?? {}) as Record<string, unknown>;
+    const event = (reg.Event ?? {}) as Record<string, unknown>;
+    return {
+      registrationId: String(reg.Id ?? ""),
+      eventId: String(event.Id ?? ""),
+      contactId: String(contact.Id ?? ""),
+      name: String(contact.Name ?? ""),
+      registrationTypeId: String(reg.RegistrationTypeId ?? ""),
+      registrationType: String(regType.Name ?? ""),
+      organization: String(reg.Organization ?? ""),
+      isPaid: Boolean(reg.IsPaid ?? false),
+      registrationFee: Number(reg.RegistrationFee ?? 0),
+      paidSum: Number(reg.PaidSum ?? 0),
+      OnWaitlist: Boolean(reg.OnWaitlist ?? false),
+      Status: String(reg.Status ?? ""),
+    };
+  });
+}
+
+/**
+ * Fetches a single WA event registration by its registration ID.
+ * Used by the webhook handler for Created/Changed/Deleted registration events.
+ * Returns null if not found.
+ */
+export async function fetchWARegistration(
+  accessToken: string,
+  accountId: string,
+  registrationId: string | number
+): Promise<{
+  registrationId: string;
+  eventId: string;
+  contactId: string;
+  name: string;
+  registrationTypeId: string;
+  registrationType: string;
+  organization: string;
+  isPaid: boolean;
+  registrationFee: number;
+  paidSum: number;
+  OnWaitlist: boolean;
+  Status: string;
+  hasGuests: boolean;
+  guestIds: string[];
+} | null> {
+  const url = `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations/${registrationId}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(
+      `WA registration fetch failed (${registrationId}): ${response.statusText}`
+    );
+  }
+  const reg = await response.json() as Record<string, unknown>;
+  const contact = (reg.Contact ?? {}) as Record<string, unknown>;
+  const regType = (reg.RegistrationType ?? {}) as Record<string, unknown>;
+  const event = (reg.Event ?? {}) as Record<string, unknown>;
+  const regGuests = (reg.GuestRegistrationsSummary ?? {}) as Record<string, unknown>;
+  const guestArray = (regGuests.GuestRegistrations ?? []) as Array<{ Id: number; Url: string }>;
+  const guestIds = guestArray.map((g) => String(g.Id));
+  return {
+    registrationId: String(reg.Id ?? ""),
+    eventId: String(event.Id ?? ""),
+    contactId: String(contact.Id ?? ""),
+    name: String(reg.DisplayName ?? contact.Name ?? ""),
+    registrationTypeId: String(reg.RegistrationTypeId ?? ""),
+    registrationType: String(regType.Name ?? ""),
+    organization: String(reg.Organization ?? ""),
+    isPaid: Boolean(reg.IsPaid ?? false),
+    registrationFee: Number(reg.RegistrationFee ?? 0),
+    paidSum: Number(reg.PaidSum ?? 0),
+    OnWaitlist: Boolean(reg.OnWaitlist ?? false),
+    Status: String(reg.Status ?? ""),
+    hasGuests: guestIds.length > 0,
+    guestIds,
+  };
+}
+
 /** Converts a chapter name to its Firestore document slug. */
 export function chapterSlug(chapterName: string): string {
   return chapterName
