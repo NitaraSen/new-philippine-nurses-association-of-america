@@ -114,6 +114,7 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
     if (batchCount > 0) {
         await batch.commit();
     }
+<<<<<<< HEAD
     console.log(`syncEvents: ${added} new events added, ${skipped} skipped (already exist)`);
     // the list of fields to check for changes & update accordingly
     const FIELDS_TO_COMPARE = [
@@ -328,6 +329,9 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
     const msg = `syncEvents: ${added} new events added, ${skipped} skipped; ` +
         `registrations: ${totalRegistrations}, incomplete: ${totalIncomplete}; ` +
         `writes: ${totalAdded} added, ${totalUpdated} updated, ${totalDeleted} deleted`;
+=======
+    const msg = `syncEvents: ${added} new events added, ${skipped} skipped (already exist)`;
+>>>>>>> 55cdef87dbfc8e941748f6a3f0053967d9a80308
     console.log(msg);
     res.status(200).send(msg);
 });

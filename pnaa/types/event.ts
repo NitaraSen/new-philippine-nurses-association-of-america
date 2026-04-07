@@ -36,6 +36,9 @@ export interface AppEvent {
   // Subchapter association (optional)
   subchapterId?: string;
 
+  // Subchapter association (optional)
+  subchapterId?: string;
+
   // Metadata
   source: "wildapricot" | "app";
   lastUpdatedUser: string;

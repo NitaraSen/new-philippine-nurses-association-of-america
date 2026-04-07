@@ -54,6 +54,7 @@ exports.wildApricotWebhook = (0, https_1.onRequest)(async (req, res) => {
                 await handleEvent(eventId, action);
                 break;
             }
+<<<<<<< HEAD
             case "EventRegistration": {
                 const eventId = String(Parameters["EventToRegister.Id"]);
                 const registrationId = String(Parameters["Registration.Id"]);
@@ -65,6 +66,8 @@ exports.wildApricotWebhook = (0, https_1.onRequest)(async (req, res) => {
                 await handleEventRegistration(eventId, registrationId, action, webhookStatus);
                 break;
             }
+=======
+>>>>>>> 55cdef87dbfc8e941748f6a3f0053967d9a80308
             default:
                 console.log(`wildApricotWebhook: unhandled MessageType "${MessageType}"`);
         }
@@ -146,6 +149,7 @@ async function handleContact(waContactId) {
         await chapterBatch.commit();
     console.log(`wildApricotWebhook: updated member ${member.memberId} (${member.name})`);
 }
+<<<<<<< HEAD
 async function handleEventRegistration(eventId, registrationId, action, webhookStatus) {
     console.log(`wildApricotWebhook [EventRegistration]: action=${action} eventId=${eventId} registrationId=${registrationId} webhookStatus=${webhookStatus ?? "absent"}`);
     const db = (0, firestore_1.getFirestore)();
@@ -289,6 +293,8 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         console.log(`wildApricotWebhook [EventRegistration/Changed]: updated attendee ${registrationId} on event ${eventId} (guestDelta: ${guestDelta}, revenueDelta: ${revenueDelta}, incompleteDelta: ${incompleteDelta})`);
     }
 }
+=======
+>>>>>>> 55cdef87dbfc8e941748f6a3f0053967d9a80308
 async function handleEvent(eventId, action) {
     const db = (0, firestore_1.getFirestore)();
     const docRef = db.collection("events").doc(eventId);

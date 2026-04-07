@@ -5,5 +5,9 @@ pnaa-chapter-management-firebase-adminsdk-fbsvc-fc1a5f5216.json
 pnaa/.env.local
 pnaa/.env
 functions/.env
+<<<<<<< HEAD
 functions/.env.*
 *-debug.log
+=======
+functions/.env.*
+>>>>>>> 55cdef87dbfc8e941748f6a3f0053967d9a80308
