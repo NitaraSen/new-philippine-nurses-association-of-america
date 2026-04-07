@@ -167,6 +167,12 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         const wasIncomplete = oldStatus !== "Paid" && oldStatus !== "Free";
         const batch = db.batch();
         batch.delete(attendeeRef);
+        const eventDoc = await eventRef.get();
+        if (!eventDoc.exists) {
+            console.log(`wildApricotWebhook [EventRegistration/Deleted]: event ${eventId} not found — deleting orphaned attendee only`);
+            await attendeeRef.delete();
+            return;
+        }
         batch.update(eventRef, {
             attendees: firestore_1.FieldValue.increment(-1),
             registrations: firestore_1.FieldValue.increment(-1),
@@ -251,6 +257,11 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
             console.error(`wildApricotWebhook [EventRegistration/Changed]: attendee ${registrationId} not found in Firestore — skipping update`);
             return;
         }
+        if (!eventDoc.exists) {
+            console.error(`wildApricotWebhook [EventRegistration/Changed]: event ${eventId} not found in Firestore — updating attendee only`);
+            await attendeeRef.set(attendeeData);
+            return;
+        }
         const oldData = existingAttendee.data() ?? {};
         const oldGuestIds = oldData.guestIds ?? [];
         const oldPaidSum = Number(oldData.paidSum ?? 0);
@@ -259,7 +270,6 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         const guestDelta = newGuestIds.length - oldGuestIds.length;
         const revenueDelta = newPaidSum - oldPaidSum;
         const incompleteDelta = (newIsIncomplete ? 1 : 0) - (oldIsIncomplete ? 1 : 0);
-        // Compute updated guestIds array: remove old, add new
         const currentGuestIds = eventDoc.data()?.guestIds ?? [];
         const updatedGuestIds = [
             ...currentGuestIds.filter((id) => !oldGuestIds.includes(id)),

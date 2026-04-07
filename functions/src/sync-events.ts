@@ -342,7 +342,11 @@ export const syncEvents = onRequest(
           eventBatch.set(eventRef.collection("attendees").doc(id), incoming);
           eventBatchCount++;
           added++;
-        } else if (FIELDS_TO_COMPARE.some((f) => incoming[f] !== existing[f])) { // check if some do not match
+        } else if (FIELDS_TO_COMPARE.some((f) =>
+            f === "guestIds"
+              ? JSON.stringify(incoming[f] ?? []) !== JSON.stringify(existing[f] ?? [])
+              : incoming[f] !== existing[f]
+          )) {
           eventBatch.set(eventRef.collection("attendees").doc(id), incoming);
           eventBatchCount++;
           updated++;
