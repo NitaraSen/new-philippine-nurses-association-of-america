@@ -106,6 +106,28 @@ const columns: ColumnDef<EventRow, unknown>[] = [
     ),
   },
   {
+    accessorKey: "guests",
+    header: "Guests",
+    size: 100,
+    enableSorting: true,
+    cell: ({ row }) => (
+      <span className="tabular-nums text-sm">
+        {row.original.guests > 0 ? row.original.guests.toLocaleString() : "—"}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "totalRevenue",
+    header: "Total Revenue",
+    size: 100,
+    enableSorting: true,
+    cell: ({ row }) => (
+      <span className="tabular-nums text-sm">
+        {row.original.totalRevenue > 0 ? `$${row.original.totalRevenue.toLocaleString("en-US")}` : "—"}
+      </span>
+    ),
+  },
+  {
     accessorKey: "volunteers",
     header: "Volunteers",
     size: 100,
