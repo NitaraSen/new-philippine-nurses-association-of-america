@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useCollection } from "@/hooks/use-firestore";
 import { where, orderBy, limit } from "firebase/firestore";
@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { formatDate } from "@/lib/utils";
 import type { AppEvent } from "@/types/event";
@@ -206,6 +207,31 @@ export function EventList() {
 
   const { data: events, loading } = useCollection<AppEvent>("events", constraints);
   const data = events as EventRow[];
+
+  // Notify if user toggled archived on but there are no archived events.
+  // Use a ref to detect when loading settles after the toggle was turned on.
+  const justToggledArchived = useRef(false);
+  useEffect(() => {
+    if (showArchived) {
+      justToggledArchived.current = true;
+    } else {
+      justToggledArchived.current = false;
+    }
+  }, [showArchived]);
+
+  useEffect(() => {
+    if (justToggledArchived.current && !loading) {
+      if (!data.some((e) => e.archived)) {
+        toast.info("No archived events", {
+          description: "All events in this view are currently active.",
+          duration: 3000,
+          style: { background: "#eff6ff", borderColor: "#bfdbfe", color: "#1e40af" },
+          classNames: { description: "!text-blue-500" },
+        });
+      }
+      justToggledArchived.current = false;
+    }
+  }, [loading, data]);
 
   // Cards view still uses client-side filtering
   const filteredForCards = useMemo(() => {
