@@ -241,8 +241,6 @@ export async function fetchWARegistration(
   paidSum: number;
   OnWaitlist: boolean;
   Status: string;
-  hasGuests: boolean;
-  guestIds: string[];
 } | null> {
   const url = `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations/${registrationId}`;
   const response = await fetch(url, {
@@ -261,9 +259,7 @@ export async function fetchWARegistration(
   const contact = (reg.Contact ?? {}) as Record<string, unknown>;
   const regType = (reg.RegistrationType ?? {}) as Record<string, unknown>;
   const event = (reg.Event ?? {}) as Record<string, unknown>;
-  const regGuests = (reg.GuestRegistrationsSummary ?? {}) as Record<string, unknown>;
-  const guestArray = (regGuests.GuestRegistrations ?? []) as Array<{ Id: number; Url: string }>;
-  const guestIds = guestArray.map((g) => String(g.Id));
+
   return {
     registrationId: String(reg.Id ?? ""),
     eventId: String(event.Id ?? ""),
@@ -277,8 +273,6 @@ export async function fetchWARegistration(
     paidSum: Number(reg.PaidSum ?? 0),
     OnWaitlist: Boolean(reg.OnWaitlist ?? false),
     Status: String(reg.Status ?? ""),
-    hasGuests: guestIds.length > 0,
-    guestIds,
   };
 }
 

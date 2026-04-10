@@ -88,8 +88,6 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
             endTime: "",
             eventPoster: { name: "", ref: "", downloadURL: "" },
             attendees: 0,
-            guests: 0,
-            guestIds: [],
             incompleteRegistrations: 0,
             registrations: 0,
             volunteers: 0,
@@ -120,7 +118,6 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
         "registrationId", "eventId", "contactId", "name",
         "registrationTypeId", "registrationType", "organization",
         "isPaid", "registrationFee", "paidSum", "OnWaitlist", "Status",
-        "hasGuests", "guestIds"
     ];
     // Counters — updated atomically after each chunk via returned values
     let totalAdded = 0;
@@ -130,10 +127,6 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
     let totalIncomplete = 0;
     // PROCESSES ONE EVENT: 
     // fetch registrations and place that information in attendees
-    // guest lists are tracked and fetched individually
-    // -  currently, this causes a {"code":"ECONNRESET"} error to be thrown, so fetches are commented out right now
-    // -  guest IDs are stored within attendees and in a list of guest IDs
-    // in the future, we could have a separate process for fetching guests that runs after all registrations are processed
     // diff against Firestore, commit own batch
     async function processEvent(event) {
         const eventId = String(event.Id);
@@ -167,29 +160,20 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
         // Build a Map of incoming WA registrations keyed by registrationId
         const waRegs = new Map();
         let eventIncomplete = 0;
-        let eventGuests = 0;
-        let allGuestIdsForEvent = [];
         let totalRevenue = 0;
         for (const reg of allRegistrations) {
             // Extract data for each registration to prepare to put in registration
             const contact = (reg.Contact ?? {});
             const regEvent = (reg.Event ?? {});
             const regType = (reg.RegistrationType ?? {});
-            const regGuests = (reg.GuestRegistrationsSummary ?? {});
             const registrationId = String(reg.Id ?? "");
             const contactId = String(contact.Id ?? "");
-            const guestArray = (regGuests.GuestRegistrations ?? []);
-            const guestIds = guestArray.map((g) => String(g.Id));
             if (!registrationId || !contactId)
                 continue;
             const status = String(reg.Status ?? "");
-            // Count incomplete registrations and guests for event-level metrics
+            // Count incomplete registrations for event-level metrics
             if (status !== "Paid" && status !== "Free")
                 eventIncomplete++;
-            if (guestIds.length > 0) {
-                eventGuests += guestIds.length;
-                allGuestIdsForEvent.push(...guestIds);
-            }
             totalRevenue += Number(reg.PaidSum ?? 0);
             // put registration info in REgs
             waRegs.set(registrationId, {
@@ -205,24 +189,8 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
                 paidSum: Number(reg.PaidSum ?? 0),
                 OnWaitlist: Boolean(reg.OnWaitlist ?? false),
                 Status: status,
-                hasGuests: guestIds.length > 0,
-                guestIds,
             });
         }
-        // const guestResults = await Promise.all(
-        //   allGuestIds.map(async (guestId) => {
-        //     const guestUrl =
-        //       `https://api.wildapricot.org/v2.1/Accounts/${accountId}/eventregistrations/${guestId}`;
-        //     const guestResponse = await fetch(guestUrl, {
-        //       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-        //     });
-        //     if (!guestResponse.ok) {
-        //       console.error(`Guest fetch failed (${guestId}): ${guestResponse.statusText}`);
-        //       return null;
-        //     }
-        //     return { guestId, data: await guestResponse.json() as Record<string, unknown> };
-        //   })
-        // );
         // Read existing attendees from Firestore
         const attendeeSnap = await eventRef.collection("attendees").get();
         const attendeeMap = new Map();
@@ -241,30 +209,6 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
                 eventBatchCount = 0;
             }
         };
-        //ISSUE: code below does load guest Results in guests collection, and works.
-        // However, it causes ECONNRESET errors when processing events with many guests 
-        // probably due to too many concurrent fetches in the guestResults Promise.all above.
-        // for (const result of guestResults) {
-        //   if (!result) continue;
-        //   const { guestId, data: g } = result;
-        //   const gContact = (g.Contact ?? {}) as Record<string, unknown>;
-        //   const gRegType = (g.RegistrationType ?? {}) as Record<string, unknown>;
-        //   eventBatch.set(eventRef.collection("guests").doc(guestId), {
-        //     registrationId: String(g.Id ?? ""),
-        //     contactId: String(gContact.Id ?? ""),
-        //     name: String(g.DisplayName ?? ""),
-        //     registrationTypeId: String(g.RegistrationTypeId ?? ""),
-        //     registrationType: String(gRegType.Name ?? ""),
-        //     organization: String(g.Organization ?? ""),
-        //     isPaid: Boolean(g.IsPaid ?? false),
-        //     registrationFee: Number(g.RegistrationFee ?? 0),
-        //     paidSum: Number(g.PaidSum ?? 0),
-        //     OnWaitlist: Boolean(g.OnWaitlist ?? false),
-        //     Status: String(g.Status ?? ""),
-        //   });
-        //   eventBatchCount++;
-        //   await commitIfFull();
-        // }
         // Diff attendees: add new, update changed, delete removed
         for (const [id, incoming] of waRegs) {
             const existing = attendeeMap.get(id);
@@ -273,9 +217,7 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
                 eventBatchCount++;
                 added++;
             }
-            else if (FIELDS_TO_COMPARE.some((f) => f === "guestIds"
-                ? JSON.stringify(incoming[f] ?? []) !== JSON.stringify(existing[f] ?? [])
-                : incoming[f] !== existing[f])) {
+            else if (FIELDS_TO_COMPARE.some((f) => incoming[f] !== existing[f])) {
                 eventBatch.set(eventRef.collection("attendees").doc(id), incoming);
                 eventBatchCount++;
                 updated++;
@@ -297,8 +239,6 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
             registrations: waRegs.size,
             attendees: waRegs.size,
             incompleteRegistrations: eventIncomplete,
-            guests: eventGuests,
-            guestIds: allGuestIdsForEvent,
             totalRevenue: totalRevenue,
             lastUpdated: firestore_1.Timestamp.now(),
             lastUpdatedUser: "WildApricot",
@@ -311,8 +251,6 @@ exports.syncEvents = (0, https_1.onRequest)({ timeoutSeconds: 300 }, async (req,
     }
     // Process all events in chunks of 3 concurrently
     // - was an attempt to avoid the ECONNRESET error thrown 
-    // when processing events with many guests, but issue persists,
-    // so guest fetches are currently disabled
     const CHUNK_SIZE = 3;
     for (let i = 0; i < allWAEvents.length; i += CHUNK_SIZE) {
         const chunk = allWAEvents.slice(i, i + CHUNK_SIZE);

@@ -190,9 +190,6 @@ async function fetchWARegistration(accessToken, accountId, registrationId) {
     const contact = (reg.Contact ?? {});
     const regType = (reg.RegistrationType ?? {});
     const event = (reg.Event ?? {});
-    const regGuests = (reg.GuestRegistrationsSummary ?? {});
-    const guestArray = (regGuests.GuestRegistrations ?? []);
-    const guestIds = guestArray.map((g) => String(g.Id));
     return {
         registrationId: String(reg.Id ?? ""),
         eventId: String(event.Id ?? ""),
@@ -206,8 +203,6 @@ async function fetchWARegistration(accessToken, accountId, registrationId) {
         paidSum: Number(reg.PaidSum ?? 0),
         OnWaitlist: Boolean(reg.OnWaitlist ?? false),
         Status: String(reg.Status ?? ""),
-        hasGuests: guestIds.length > 0,
-        guestIds,
     };
 }
 /** Converts a chapter name to its Firestore document slug. */

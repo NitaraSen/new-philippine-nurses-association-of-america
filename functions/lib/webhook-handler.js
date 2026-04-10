@@ -161,7 +161,6 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
             return;
         }
         const existingData = existing.data() ?? {};
-        const oldGuestIds = existingData.guestIds ?? [];
         const oldPaidSum = Number(existingData.paidSum ?? 0);
         const oldStatus = String(existingData.Status ?? "");
         const wasIncomplete = oldStatus !== "Paid" && oldStatus !== "Free";
@@ -176,17 +175,13 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         batch.update(eventRef, {
             attendees: firestore_1.FieldValue.increment(-1),
             registrations: firestore_1.FieldValue.increment(-1),
-            ...(oldGuestIds.length > 0 && {
-                guests: firestore_1.FieldValue.increment(-oldGuestIds.length),
-                guestIds: firestore_1.FieldValue.arrayRemove(...oldGuestIds),
-            }),
             ...(oldPaidSum !== 0 && { totalRevenue: firestore_1.FieldValue.increment(-oldPaidSum) }),
             ...(wasIncomplete && { incompleteRegistrations: firestore_1.FieldValue.increment(-1) }),
             lastUpdated: firestore_1.Timestamp.now(),
             lastUpdatedUser: "WildApricot",
         });
         await batch.commit();
-        console.log(`wildApricotWebhook [EventRegistration/Deleted]: deleted attendee ${registrationId} from event ${eventId} (guests: -${oldGuestIds.length}, revenue: -${oldPaidSum}, incomplete: ${wasIncomplete ? "-1" : "0"})`);
+        console.log(`wildApricotWebhook [EventRegistration/Deleted]: deleted attendee ${registrationId} from event ${eventId}, revenue: -${oldPaidSum}, incomplete: ${wasIncomplete ? "-1" : "0"})`);
         return;
     }
     console.log(`wildApricotWebhook [EventRegistration/${action}]: fetching registration ${registrationId} from WA`);
@@ -197,7 +192,7 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         console.error(`wildApricotWebhook [EventRegistration/${action}]: registration ${registrationId} not found in WA (404) — skipping`);
         return;
     }
-    console.log(`wildApricotWebhook [EventRegistration/${action}]: fetched registration — name="${registration.name}" contactId=${registration.contactId} status=${registration.Status} hasGuests=${registration.hasGuests}`);
+    console.log(`wildApricotWebhook [EventRegistration/${action}]: fetched registration — name="${registration.name}" contactId=${registration.contactId} status=${registration.Status}`);
     const attendeeData = {
         registrationId: registration.registrationId,
         eventId: registration.eventId,
@@ -211,10 +206,7 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         paidSum: registration.paidSum,
         OnWaitlist: registration.OnWaitlist,
         Status: webhookStatus ?? registration.Status,
-        hasGuests: registration.hasGuests,
-        guestIds: registration.guestIds,
     };
-    const newGuestIds = (attendeeData.guestIds ?? []);
     const newPaidSum = attendeeData.paidSum;
     const newStatus = attendeeData.Status;
     const newIsIncomplete = newStatus !== "Paid" && newStatus !== "Free";
@@ -237,17 +229,13 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
         batch.update(eventRef, {
             attendees: firestore_1.FieldValue.increment(1),
             registrations: firestore_1.FieldValue.increment(1),
-            ...(newGuestIds.length > 0 && {
-                guests: firestore_1.FieldValue.increment(newGuestIds.length),
-                guestIds: firestore_1.FieldValue.arrayUnion(...newGuestIds),
-            }),
             ...(newPaidSum !== 0 && { totalRevenue: firestore_1.FieldValue.increment(newPaidSum) }),
             ...(newIsIncomplete && { incompleteRegistrations: firestore_1.FieldValue.increment(1) }),
             lastUpdated: firestore_1.Timestamp.now(),
             lastUpdatedUser: "WildApricot",
         });
         await batch.commit();
-        console.log(`wildApricotWebhook [EventRegistration/Created]: added attendee ${registrationId} to event ${eventId} (guests: +${newGuestIds.length}, revenue: +${newPaidSum}, incomplete: ${newIsIncomplete ? "+1" : "0"})`);
+        console.log(`wildApricotWebhook [EventRegistration/Created]: added attendee ${registrationId} to event ${eventId} (revenue: +${newPaidSum}, incomplete: ${newIsIncomplete ? "+1" : "0"})`);
     }
     else {
         // Changed — overwrite doc, compute deltas against old Firestore values
@@ -263,30 +251,21 @@ async function handleEventRegistration(eventId, registrationId, action, webhookS
             return;
         }
         const oldData = existingAttendee.data() ?? {};
-        const oldGuestIds = oldData.guestIds ?? [];
         const oldPaidSum = Number(oldData.paidSum ?? 0);
         const oldStatus = String(oldData.Status ?? "");
         const oldIsIncomplete = oldStatus !== "Paid" && oldStatus !== "Free";
-        const guestDelta = newGuestIds.length - oldGuestIds.length;
         const revenueDelta = newPaidSum - oldPaidSum;
         const incompleteDelta = (newIsIncomplete ? 1 : 0) - (oldIsIncomplete ? 1 : 0);
-        const currentGuestIds = eventDoc.data()?.guestIds ?? [];
-        const updatedGuestIds = [
-            ...currentGuestIds.filter((id) => !oldGuestIds.includes(id)),
-            ...newGuestIds,
-        ];
         const batch = db.batch();
         batch.set(attendeeRef, attendeeData);
         batch.update(eventRef, {
-            ...(guestDelta !== 0 && { guests: firestore_1.FieldValue.increment(guestDelta) }),
-            guestIds: updatedGuestIds,
             ...(revenueDelta !== 0 && { totalRevenue: firestore_1.FieldValue.increment(revenueDelta) }),
             ...(incompleteDelta !== 0 && { incompleteRegistrations: firestore_1.FieldValue.increment(incompleteDelta) }),
             lastUpdated: firestore_1.Timestamp.now(),
             lastUpdatedUser: "WildApricot",
         });
         await batch.commit();
-        console.log(`wildApricotWebhook [EventRegistration/Changed]: updated attendee ${registrationId} on event ${eventId} (guestDelta: ${guestDelta}, revenueDelta: ${revenueDelta}, incompleteDelta: ${incompleteDelta})`);
+        console.log(`wildApricotWebhook [EventRegistration/Changed]: updated attendee ${registrationId} on event ${eventId} (revenueDelta: ${revenueDelta}, incompleteDelta: ${incompleteDelta})`);
     }
 }
 async function handleEvent(eventId, action) {
