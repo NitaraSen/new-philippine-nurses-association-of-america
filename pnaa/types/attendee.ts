@@ -11,6 +11,4 @@ export interface AppEvent {
       paidSum: number;
       OnWaitlist: boolean;
       Status: string;
-      hasGuests: boolean;
-      guestIds?: string[];
 }

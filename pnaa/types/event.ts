@@ -24,11 +24,9 @@ export interface AppEvent {
 
   // Metrics
   attendees: number;
-  guests: 0,
-  guestIds: [],
-  registrations: 0,
-  incompleteRegistrations: 0,
-  totalRevenue: 0,
+  registrations: number;
+  incompleteRegistrations: number;
+  totalRevenue: number;
   volunteers: number;
   participantsServed: number;
   contactHours: number;

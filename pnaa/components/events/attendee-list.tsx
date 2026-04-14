@@ -106,22 +106,19 @@ export function AttendeeList({ eventId }: { eventId: string }) {
           return 2_000_000;
         },
         cell: ({ row }) =>
-          row.original.isPaid ? (
-            row.original.registrationFee == 0 ? (
-                <Badge variant="outline" className="text-xs text-muted-foreground border-muted bg-muted/50">
-                  Free
-                </Badge>
-            ):(
+          row.original.registrationFee === 0 ? (
+            <Badge variant="outline" className="text-xs text-muted-foreground border-muted bg-muted/50">
+              Free
+            </Badge>
+          ) : row.original.isPaid ? (
             <Badge variant="outline" className="text-xs text-green-700 border-green-200 bg-green-50 dark:bg-green-950/30">
               Paid in Full - ${row.original.paidSum.toFixed(2)}
             </Badge>
-            )
           ) : (
             <Badge variant="outline" className="text-xs text-amber-700 border-amber-200 bg-amber-50 dark:bg-amber-950/30">
-              ${ (row.original.registrationFee - row.original.paidSum).toFixed(2)} Due
+              ${(row.original.registrationFee - row.original.paidSum).toFixed(2)} Due
             </Badge>
-          ),
-      },
+          ),      },
     ],
     [registrationNames]
   );
