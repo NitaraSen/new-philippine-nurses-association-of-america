@@ -253,7 +253,7 @@ async function handleEventRegistration(
     registrationFee: registration.registrationFee,
     paidSum: registration.paidSum,
     OnWaitlist: registration.OnWaitlist,
-    Status: webhookStatus ?? registration.Status,
+    Status: registration.Status || webhookStatus || "",
   };
 
 
