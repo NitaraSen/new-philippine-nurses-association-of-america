@@ -18,8 +18,10 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-if (process.env.NEXT_PUBLIC_USE_EMULATOR === "true") {
+if (process.env.NEXT_PUBLIC_USE_EMULATOR === "true" &&
+   !(global as Record<string, unknown>)["__FIRESTORE_EMULATOR_CONNECTED"]) {
   connectFirestoreEmulator(db, "localhost", 8080);
+  (global as Record<string, unknown>)["__FIRESTORE_EMULATOR_CONNECTED"] = true;
 }
 
 export default app;
