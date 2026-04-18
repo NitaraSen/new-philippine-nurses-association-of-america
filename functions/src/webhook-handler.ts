@@ -199,7 +199,7 @@ async function handleEventRegistration(
   const lockSnap = await eventRef.get();
   if (lockSnap.exists) {
     const syncLock = lockSnap.data()?.syncLock as Timestamp | undefined;
-    if (syncLock && Timestamp.now().toMillis() - syncLock.toMillis() < 5 * 60 * 1000) {
+    if (syncLock && Timestamp.now().toMillis() - syncLock.toMillis() < 6 * 60 * 1000) {
       console.log(`wildApricotWebhook [EventRegistration]: sync in progress for event ${eventId} — skipping ${action}`);
       return;
     }

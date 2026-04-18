@@ -40,7 +40,7 @@ export function EventMetrics({ event }: { event: AppEvent }) {
               <metric.icon className="h-5 w-5 text-primary mb-2" />
               <span className="text-2xl font-bold">
                 {metric.key === "totalRevenue"
-                  ? `${(event[metric.key] ?? 0).toLocaleString("en-US")}`
+                  ? `$${(event[metric.key] ?? 0).toLocaleString("en-US")}`
                   : (event[metric.key] ?? 0)}
               </span>
               <span className="text-xs text-muted-foreground mt-1">
