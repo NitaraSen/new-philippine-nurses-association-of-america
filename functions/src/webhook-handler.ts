@@ -215,8 +215,8 @@ async function handleEventRegistration(
   // Deleted: remove the element.
   if (action === "Deleted") {
     console.log(`wildApricotWebhook [EventRegistration/Deleted]: checking if attendee doc ${registrationId} exists`);
-    const existing = await attendeeRef.get();    if (!existing.exists) {
-      console.log(`wildApricotWebhook [EventRegistration/Deleted]: attendee ${registrationId} not found in Firestore — nothing to delete`);
+    const existing = await attendeeRef.get();
+    if (!existing.exists) {      console.log(`wildApricotWebhook [EventRegistration/Deleted]: attendee ${registrationId} not found in Firestore — nothing to delete`);
       return;
     }
     const existingData = existing.data() ?? {};
